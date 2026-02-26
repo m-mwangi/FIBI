@@ -20,40 +20,43 @@ export function Navigation() {
   };
 
   return (
-    <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <nav className="absolute top-0 left-0 w-full z-50">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
+
           {/* Logo */}
           <Link to="/" className="flex items-center">
-            <div className="text-2xl text-emerald-600 mr-2">🌱</div>
-            <span className="text-xl text-gray-900">FIBI</span>
+            <div className="text-2xl text-white mr-2">🌱</div>
+            <span className="text-xl text-white">FIBI</span>
           </Link>
 
           {/* Navigation Links */}
           <div className="flex items-center gap-1">
             <Link to="/">
               <Button 
-                variant={isActive('/') ? 'default' : 'ghost'}
-                className={isActive('/') ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+                variant="ghost"
+                className="text-white hover:bg-white/20"
               >
                 <Home className="h-4 w-4 mr-2" />
                 Home
               </Button>
             </Link>
+
             <Link to="/projects">
               <Button 
-                variant={isActive('/projects') || location.pathname.startsWith('/projects/') ? 'default' : 'ghost'}
-                className={(isActive('/projects') || location.pathname.startsWith('/projects/')) ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+                variant="ghost"
+                className="text-white hover:bg-white/20"
               >
                 <FolderOpen className="h-4 w-4 mr-2" />
                 Projects
               </Button>
             </Link>
+
             {isAuthenticated && (
               <Link to="/dashboard">
                 <Button 
-                  variant={isActive('/dashboard') ? 'default' : 'ghost'}
-                  className={isActive('/dashboard') ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+                  variant="ghost"
+                  className="text-white hover:bg-white/20"
                 >
                   <LayoutDashboard className="h-4 w-4 mr-2" />
                   Dashboard
@@ -62,13 +65,13 @@ export function Navigation() {
             )}
           </div>
 
-          {/* Auth Buttons / User Menu */}
+          {/* Auth Buttons */}
           <div className="flex items-center gap-2">
             {isAuthenticated ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="flex items-center gap-2">
-                    <User className="h-4 w-4" />
+                  <Button variant="outline" className="border-white text-white hover:bg-white/20">
+                    <User className="h-4 w-4 mr-2" />
                     {user?.name}
                   </Button>
                 </DropdownMenuTrigger>
@@ -76,18 +79,12 @@ export function Navigation() {
                   <DropdownMenuLabel>My Account</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link to="/dashboard" className="cursor-pointer">
-                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                    <Link to="/dashboard">
                       Dashboard
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="cursor-pointer">
-                    <User className="mr-2 h-4 w-4" />
-                    Profile Settings
-                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={logout} className="cursor-pointer text-red-600">
-                    <LogOut className="mr-2 h-4 w-4" />
+                  <DropdownMenuItem onClick={logout} className="text-red-600">
                     Log Out
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -95,7 +92,7 @@ export function Navigation() {
             ) : (
               <>
                 <Link to="/login">
-                  <Button variant="ghost">
+                  <Button variant="ghost" className="text-white hover:bg-white/20">
                     Log In
                   </Button>
                 </Link>
@@ -107,6 +104,7 @@ export function Navigation() {
               </>
             )}
           </div>
+
         </div>
       </div>
     </nav>
