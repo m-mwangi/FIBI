@@ -19,7 +19,7 @@ export default function Home() {
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentImage((prev) => (prev + 1) % images.length);
-    }, 5000); // 5 seconds per image
+    }, 5000);
 
     return () => clearInterval(interval);
   }, []);
@@ -27,10 +27,9 @@ export default function Home() {
   return (
     <div className="min-h-screen">
 
-      {/* Hero Section with Slideshow */}
+      {/* Hero Section */}
       <section className="relative h-screen flex items-center justify-center overflow-hidden">
 
-        {/* Background Images */}
         <div className="absolute inset-0">
           {images.map((img, index) => (
             <div
@@ -43,48 +42,15 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Dark Overlay */}
         <div className="absolute inset-0 bg-black/50"></div>
 
-        {/* Content */}
         <div className="relative z-10 text-center max-w-4xl mx-auto px-4 text-white">
           <h1 className="text-5xl md:text-6xl mb-6">
             Invest Together. Profit Together.
           </h1>
-          <p className="text-xl mb-8 max-w-2xl mx-auto">
+          <p className="text-xl max-w-2xl mx-auto">
             FIBI enables collective investment in vetted land projects. Earn passive income through sustainable developments like eco-lodges, solar farms, and agroforestry.
           </p>
-
-          {/* ✅ Updated Hero Buttons */}
-          <div className="flex gap-4 justify-center flex-wrap">
-            {/* Green Explore Projects button stays the same */}
-            <Link to="/projects">
-              <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700">
-                Explore Projects <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
-
-            {/* Hero button always visible */}
-            {isAuthenticated ? (
-              <Link to="/dashboard">
-                <Button
-                  size="lg"
-                  className="border border-white text-white bg-transparent hover:bg-white hover:text-black transition-all"
-                >
-                  View Dashboard
-                </Button>
-              </Link>
-            ) : (
-              <Link to="/signup">
-                <Button
-                  size="lg"
-                  className="border border-white text-white bg-transparent hover:bg-white hover:text-black transition-all"
-                >
-                  Sign Up Free
-                </Button>
-              </Link>
-            )}
-          </div>
         </div>
       </section>
 
@@ -176,11 +142,21 @@ export default function Home() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-20 px-4 bg-emerald-600 text-white">
-        <div className="max-w-4xl mx-auto text-center">
+      {/* ✅ Updated CTA Section with hero3 image */}
+      <section className="relative py-20 px-4 text-white overflow-hidden">
+        {/* Background Image */}
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: "url('/images/hero3.png')" }}
+        />
+
+        {/* Dark Overlay for readability */}
+        <div className="absolute inset-0 bg-black/60"></div>
+
+        {/* Content */}
+        <div className="relative z-10 max-w-4xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl mb-4">Ready to Start Investing?</h2>
-          <p className="text-xl mb-8 text-emerald-50">
+          <p className="text-xl mb-8 text-gray-200">
             Join thousands of investors building wealth through sustainable land development.
           </p>
           <Link to="/projects">
