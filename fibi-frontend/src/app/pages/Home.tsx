@@ -8,7 +8,6 @@ import { useState, useEffect } from 'react';
 export default function Home() {
   const { isAuthenticated } = useAuth();
 
-  // Slideshow images
   const images = [
     "/images/hero1.jpeg",
     "/images/hero2.jpeg",
@@ -20,7 +19,6 @@ export default function Home() {
     const interval = setInterval(() => {
       setCurrentImage((prev) => (prev + 1) % images.length);
     }, 5000);
-
     return () => clearInterval(interval);
   }, []);
 
@@ -29,7 +27,6 @@ export default function Home() {
 
       {/* Hero Section */}
       <section className="relative h-screen flex items-center justify-center overflow-hidden">
-
         <div className="absolute inset-0">
           {images.map((img, index) => (
             <div
@@ -41,9 +38,7 @@ export default function Home() {
             />
           ))}
         </div>
-
         <div className="absolute inset-0 bg-black/50"></div>
-
         <div className="relative z-10 text-center max-w-4xl mx-auto px-4 text-white">
           <h1 className="text-5xl md:text-6xl mb-6">
             Invest Together. Profit Together.
@@ -58,7 +53,7 @@ export default function Home() {
       <section className="py-20 px-4 bg-white">
         <div className="max-w-7xl mx-auto">
           <h2 className="text-center text-3xl mb-12 text-gray-900">Why Choose FIBI?</h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-2 gap-8">
             <Card>
               <CardContent className="pt-6">
                 <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center mb-4">
@@ -111,49 +106,46 @@ export default function Home() {
       </section>
 
       {/* How It Works */}
-      <section className="py-20 px-4 bg-gray-50">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-center text-3xl mb-12 text-gray-900">How It Works</h2>
-          <div className="grid md:grid-cols-4 gap-8">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">1</div>
-              <h3 className="mb-2 text-gray-900">Browse Land</h3>
-              <p className="text-gray-600">Explore vetted projects with expected returns and detailed information.</p>
-            </div>
+<section className="py-20 px-4 bg-gray-50">
+  <div className="max-w-7xl mx-auto">
+    <h2 className="text-center text-3xl mb-12 text-gray-900">How It Works</h2>
+    <div className="grid md:grid-cols-4 gap-8">
+      
+      <div className="text-center border border-gray-200 rounded-lg p-6 shadow-sm bg-white">
+        <div className="w-16 h-16 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">1</div>
+        <h3 className="mb-2 text-gray-900">Browse Land</h3>
+        <p className="text-gray-600">Explore vetted projects with expected returns and detailed information.</p>
+      </div>
 
-            <div className="text-center">
-              <div className="w-16 h-16 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">2</div>
-              <h3 className="mb-2 text-gray-900">Invest Together</h3>
-              <p className="text-gray-600">Contribute funds alongside other investors with low minimums.</p>
-            </div>
+      <div className="text-center border border-gray-200 rounded-lg p-6 shadow-sm bg-white">
+        <div className="w-16 h-16 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">2</div>
+        <h3 className="mb-2 text-gray-900">Invest Together</h3>
+        <p className="text-gray-600">Contribute funds alongside other investors with low minimums.</p>
+      </div>
 
-            <div className="text-center">
-              <div className="w-16 h-16 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">3</div>
-              <h3 className="mb-2 text-gray-900">Build Sustainably</h3>
-              <p className="text-gray-600">We develop eco-friendly income structures on the land parcels.</p>
-            </div>
+      <div className="text-center border border-gray-200 rounded-lg p-6 shadow-sm bg-white">
+        <div className="w-16 h-16 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">3</div>
+        <h3 className="mb-2 text-gray-900">Build Sustainably</h3>
+        <p className="text-gray-600">We develop eco-friendly income structures on the land parcels.</p>
+      </div>
 
-            <div className="text-center">
-              <div className="w-16 h-16 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">4</div>
-              <h3 className="mb-2 text-gray-900">Earn Monthly</h3>
-              <p className="text-gray-600">Receive passive income from project operations regularly.</p>
-            </div>
-          </div>
-        </div>
-      </section>
+      <div className="text-center border border-gray-200 rounded-lg p-6 shadow-sm bg-white">
+        <div className="w-16 h-16 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">4</div>
+        <h3 className="mb-2 text-gray-900">Earn Monthly</h3>
+        <p className="text-gray-600">Receive passive income from project operations regularly.</p>
+      </div>
 
-      {/* ✅ Updated CTA Section with hero3 image */}
+    </div>
+  </div>
+</section>
+
+      {/* CTA Section */}
       <section className="relative py-20 px-4 text-white overflow-hidden">
-        {/* Background Image */}
         <div
           className="absolute inset-0 bg-cover bg-center"
           style={{ backgroundImage: "url('/images/hero3.png')" }}
         />
-
-        {/* Dark Overlay for readability */}
         <div className="absolute inset-0 bg-black/60"></div>
-
-        {/* Content */}
         <div className="relative z-10 max-w-4xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl mb-4">Ready to Start Investing?</h2>
           <p className="text-xl mb-8 text-gray-200">

@@ -37,7 +37,7 @@ export function Navigation() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
 
-          {/* Logo */}
+          {/* Logo (ALWAYS visible) */}
           <Link to="/" className="flex items-center">
             <div className="text-2xl mr-2">🌱</div>
             <span
@@ -51,87 +51,11 @@ export function Navigation() {
 
           {/* Navigation Links */}
           <div className="flex items-center gap-1">
-            <Link to="/">
-              <Button
-                variant="ghost"
-                className={`transition-colors ${
-                  scrolled
-                    ? 'text-gray-800 hover:bg-gray-100'
-                    : 'text-white hover:bg-white/20'
-                }`}
-              >
-                <Home className="h-4 w-4 mr-2" />
-                Home
-              </Button>
-            </Link>
-
-            <Link to="/projects">
-              <Button
-                variant="ghost"
-                className={`transition-colors ${
-                  scrolled
-                    ? 'text-gray-800 hover:bg-gray-100'
-                    : 'text-white hover:bg-white/20'
-                }`}
-              >
-                <FolderOpen className="h-4 w-4 mr-2" />
-                Projects
-              </Button>
-            </Link>
-
-            {isAuthenticated && (
-              <Link to="/dashboard">
-                <Button
-                  variant="ghost"
-                  className={`transition-colors ${
-                    scrolled
-                      ? 'text-gray-800 hover:bg-gray-100'
-                      : 'text-white hover:bg-white/20'
-                  }`}
-                >
-                  <LayoutDashboard className="h-4 w-4 mr-2" />
-                  Dashboard
-                </Button>
-              </Link>
-            )}
-          </div>
-
-          {/* Auth Section */}
-          <div className="flex items-center gap-2">
-            {isAuthenticated ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={`transition-colors ${
-                      scrolled
-                        ? 'border-gray-300 text-gray-900'
-                        : 'border-white text-white'
-                    }`}
-                  >
-                    <User className="h-4 w-4 mr-2" />
-                    {user?.name}
-                  </Button>
-                </DropdownMenuTrigger>
-
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link to="/dashboard">Dashboard</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={logout}
-                    className="text-red-600"
-                  >
-                    Log Out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
+            
+            {/* Hide these when scrolling */}
+            {!scrolled && (
               <>
-                <Link to="/login">
+                <Link to="/">
                   <Button
                     variant="ghost"
                     className={`transition-colors ${
@@ -140,13 +64,104 @@ export function Navigation() {
                         : 'text-white hover:bg-white/20'
                     }`}
                   >
-                    Log In
+                    <Home className="h-4 w-4 mr-2" />
+                    Home
                   </Button>
                 </Link>
 
+                <Link to="/projects">
+                  <Button
+                    variant="ghost"
+                    className={`transition-colors ${
+                      scrolled
+                        ? 'text-gray-800 hover:bg-gray-100'
+                        : 'text-white hover:bg-white/20'
+                    }`}
+                  >
+                    <FolderOpen className="h-4 w-4 mr-2" />
+                    Projects
+                  </Button>
+                </Link>
+
+                {isAuthenticated && (
+                  <Link to="/dashboard">
+                    <Button
+                      variant="ghost"
+                      className={`transition-colors ${
+                        scrolled
+                          ? 'text-gray-800 hover:bg-gray-100'
+                          : 'text-white hover:bg-white/20'
+                      }`}
+                    >
+                      <LayoutDashboard className="h-4 w-4 mr-2" />
+                      Dashboard
+                    </Button>
+                  </Link>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Auth Section */}
+          <div className="flex items-center gap-2">
+            {isAuthenticated ? (
+              <>
+                {/* Hide dropdown when scrolling */}
+                {!scrolled && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={`transition-colors ${
+                          scrolled
+                            ? 'border-gray-300 text-gray-900'
+                            : 'border-white text-white'
+                        }`}
+                      >
+                        <User className="h-4 w-4 mr-2" />
+                        {user?.name}
+                      </Button>
+                    </DropdownMenuTrigger>
+
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link to="/dashboard">Dashboard</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={logout}
+                        className="text-red-600"
+                      >
+                        Log Out
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Hide Login when scrolling */}
+                {!scrolled && (
+                  <Link to="/login">
+                    <Button
+                      variant="ghost"
+                      className={`transition-colors ${
+                        scrolled
+                          ? 'text-gray-800 hover:bg-gray-100'
+                          : 'text-white hover:bg-white/20'
+                      }`}
+                    >
+                      Log In
+                    </Button>
+                  </Link>
+                )}
+
+                {/* Sign Up ALWAYS visible */}
                 <Link to="/signup">
                   <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                    Sign Up
+                    Join Investment
                   </Button>
                 </Link>
               </>
