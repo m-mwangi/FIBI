@@ -49,61 +49,79 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Features */}
-      <section className="py-20 px-4 bg-white">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-center text-3xl mb-12 text-gray-900">Why Choose FIBI?</h2>
-          <div className="grid md:grid-cols-2 gap-8">
-            <Card>
-              <CardContent className="pt-6">
-                <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center mb-4">
-                  <Leaf className="h-6 w-6 text-emerald-600" />
-                </div>
-                <h3 className="mb-2 text-gray-900">Sustainable Focus</h3>
-                <p className="text-gray-600">
-                  All projects prioritize eco-friendly development and long-term environmental impact.
-                </p>
-              </CardContent>
-            </Card>
+            {/* Features */}
+<section className="bg-white">
 
-            <Card>
-              <CardContent className="pt-6">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                  <Users className="h-6 w-6 text-blue-600" />
-                </div>
-                <h3 className="mb-2 text-gray-900">Fractional Ownership</h3>
-                <p className="text-gray-600">
-                  Low minimum investments let you pool capital with others and diversify your portfolio.
-                </p>
-              </CardContent>
-            </Card>
+  {/* FULL WIDTH Image */}
+  <div className="w-full">
+    <img
+      src="/images/hero4.png"
+      alt="Why Choose FIBI"
+      className="w-full h-[500px] object-cover"
+    />
+  </div>
 
-            <Card>
-              <CardContent className="pt-6">
-                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
-                  <TrendingUp className="h-6 w-6 text-purple-600" />
-                </div>
-                <h3 className="mb-2 text-gray-900">Passive Income</h3>
-                <p className="text-gray-600">
-                  Earn monthly or quarterly returns from operational income of completed projects.
-                </p>
-              </CardContent>
-            </Card>
+  {/* Content */}
+  <div className="py-20 px-4">
+    <div className="max-w-7xl mx-auto">
 
-            <Card>
-              <CardContent className="pt-6">
-                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
-                  <Shield className="h-6 w-6 text-orange-600" />
-                </div>
-                <h3 className="mb-2 text-gray-900">Vetted Projects</h3>
-                <p className="text-gray-600">
-                  Every opportunity is thoroughly researched and verified by our expert team.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
+      <h2 className="text-center text-3xl mb-12 text-gray-900">
+        Why Choose FIBI?
+      </h2>
+
+      <div className="grid md:grid-cols-2 gap-8">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center mb-4">
+              <Leaf className="h-6 w-6 text-emerald-600" />
+            </div>
+            <h3 className="mb-2 text-gray-900">Sustainable Focus</h3>
+            <p className="text-gray-600">
+              All projects prioritize eco-friendly development and long-term environmental impact.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+              <Users className="h-6 w-6 text-blue-600" />
+            </div>
+            <h3 className="mb-2 text-gray-900">Fractional Ownership</h3>
+            <p className="text-gray-600">
+              Low minimum investments let you pool capital with others and diversify your portfolio.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
+              <TrendingUp className="h-6 w-6 text-purple-600" />
+            </div>
+            <h3 className="mb-2 text-gray-900">Passive Income</h3>
+            <p className="text-gray-600">
+              Earn monthly or quarterly returns from operational income of completed projects.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
+              <Shield className="h-6 w-6 text-orange-600" />
+            </div>
+            <h3 className="mb-2 text-gray-900">Vetted Projects</h3>
+            <p className="text-gray-600">
+              Every opportunity is thoroughly researched and verified by our expert team.
+            </p>
+          </CardContent>
+        </Card>
+
+      </div>
+    </div>
+  </div>
+</section>
 
       {/* How It Works */}
 <section className="py-20 px-4 bg-gray-50">

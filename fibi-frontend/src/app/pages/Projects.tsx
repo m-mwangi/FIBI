@@ -1,21 +1,48 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { MapPin, TrendingUp, Users, Calendar } from 'lucide-react';
+import { MapPin, TrendingUp, Users, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { projects } from '../data/projects';
 import { Card, CardContent, CardHeader } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Progress } from '../components/ui/progress';
-import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 
 export default function Projects() {
-  const [filter, setFilter] = useState<string>('all');
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [fade, setFade] = useState(false);
 
-  const filteredProjects = projects.filter(project => {
-    if (filter === 'all') return true;
-    if (filter === 'open') return project.status === 'open';
-    return project.category === filter;
-  });
+  const sliderImages = [
+    "https://images.unsplash.com/photo-1580674285054-bed31e145f59",
+    "https://images.unsplash.com/photo-1509395176047-4a66953fd231",
+    "https://images.unsplash.com/photo-1560493676-04071c5f467b",
+    "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee"
+  ];
+
+  const nextSlide = () => {
+    setFade(true);
+    setTimeout(() => {
+      setCurrentSlide((prev) => (prev + 1) % sliderImages.length);
+      setFade(false);
+    }, 300);
+  };
+
+  const prevSlide = () => {
+    setFade(true);
+    setTimeout(() => {
+      setCurrentSlide((prev) =>
+        prev === 0 ? sliderImages.length - 1 : prev - 1
+      );
+      setFade(false);
+    }, 300);
+  };
+
+  const goToSlide = (index: number) => {
+    setFade(true);
+    setTimeout(() => {
+      setCurrentSlide(index);
+      setFade(false);
+    }, 300);
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -30,7 +57,6 @@ export default function Projects() {
     const labels: Record<string, string> = {
       'eco-lodge': 'Eco Lodge',
       'solar-farm': 'Solar Farm',
-      'agroforestry': 'Agroforestry',
       'agriculture': 'Agriculture',
     };
     return labels[category] || category;
@@ -47,34 +73,59 @@ export default function Projects() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+
+      {/* HEADER SECTION */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-8">
-          <h1 className="text-4xl mb-2 text-gray-900">Investment Opportunities</h1>
-          <p className="text-gray-600">Browse vetted land projects and start building your portfolio</p>
+          {/* Title */}
+          <h1 className="text-4xl font-bold text-gray-900 mb-6">
+            Investment Opportunities
+          </h1>
+        </div>
+
+        {/* IMAGE CAROUSEL FULL WIDTH */}
+        <div className="relative w-full h-64 md:h-80">
+          <img
+            src={sliderImages[currentSlide]}
+            alt="Investment Highlight"
+            className={`w-full h-full object-cover transition-opacity duration-300 ${fade ? 'opacity-0' : 'opacity-100'}`}
+          />
+
+          {/* Left Arrow */}
+          <button
+            onClick={prevSlide}
+            className="absolute top-1/2 -translate-y-1/2 left-4 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full z-10"
+          >
+            <ChevronLeft />
+          </button>
+
+          {/* Right Arrow */}
+          <button
+            onClick={nextSlide}
+            className="absolute top-1/2 -translate-y-1/2 right-4 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full z-10"
+          >
+            <ChevronRight />
+          </button>
+
+          {/* Dots */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2 z-10">
+            {sliderImages.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => goToSlide(index)}
+                className={`h-2 w-2 rounded-full ${
+                  currentSlide === index ? 'bg-emerald-600' : 'bg-gray-300'
+                }`}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <Tabs value={filter} onValueChange={setFilter}>
-            <TabsList>
-              <TabsTrigger value="all">All Projects</TabsTrigger>
-              <TabsTrigger value="open">Open for Funding</TabsTrigger>
-              <TabsTrigger value="eco-lodge">Eco Lodges</TabsTrigger>
-              <TabsTrigger value="solar-farm">Solar Farms</TabsTrigger>
-              <TabsTrigger value="agroforestry">Agroforestry</TabsTrigger>
-              <TabsTrigger value="agriculture">Agriculture</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-      </div>
-
-      {/* Projects Grid */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      {/* PROJECTS GRID */}
+      <div className="max-w-7xl mx-auto px-4 py-12">
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProjects.map((project) => {
+          {projects.map((project) => {
             const fundingPercentage = (project.currentFunding / project.totalFunding) * 100;
             
             return (
@@ -98,9 +149,7 @@ export default function Projects() {
                 </div>
 
                 <CardHeader>
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-xl text-gray-900">{project.title}</h3>
-                  </div>
+                  <h3 className="text-xl text-gray-900">{project.title}</h3>
                   <div className="flex items-center text-gray-600 text-sm mt-1">
                     <MapPin className="h-4 w-4 mr-1" />
                     {project.location}
@@ -109,7 +158,6 @@ export default function Projects() {
 
                 <CardContent>
                   <div className="space-y-4">
-                    {/* ROI */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center text-gray-600 text-sm">
                         <TrendingUp className="h-4 w-4 mr-1" />
@@ -118,7 +166,6 @@ export default function Projects() {
                       <span className="text-emerald-600">{project.projectedROI}%</span>
                     </div>
 
-                    {/* Funding Progress */}
                     <div>
                       <div className="flex justify-between text-sm mb-2">
                         <span className="text-gray-600">Funding Progress</span>
@@ -131,7 +178,6 @@ export default function Projects() {
                       </div>
                     </div>
 
-                    {/* Stats */}
                     <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
                       <div>
                         <div className="flex items-center text-gray-600 text-xs mb-1">
@@ -149,25 +195,20 @@ export default function Projects() {
                       </div>
                     </div>
 
-                    {/* CTA */}
                     <Link to={`/projects/${project.id}`} className="block">
                       <Button className="w-full bg-emerald-600 hover:bg-emerald-700">
                         View Details
                       </Button>
                     </Link>
+
                   </div>
                 </CardContent>
               </Card>
             );
           })}
         </div>
-
-        {filteredProjects.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-600">No projects found matching your criteria.</p>
-          </div>
-        )}
       </div>
+
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 
 export function Navigation() {
   const location = useLocation();
+  const isHomePage = location.pathname === '/';
   const { user, logout, isAuthenticated } = useAuth();
   const [scrolled, setScrolled] = useState(false);
 
@@ -21,28 +22,33 @@ export function Navigation() {
     const handleScroll = () => {
       setScrolled(window.scrollY > 80);
     };
-
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   return (
     <nav
-      className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${
+      className={`${isHomePage ? 'fixed' : 'relative'} top-0 left-0 w-full z-50 transition-all duration-300 ${
         scrolled
           ? 'bg-white/70 backdrop-blur-md border-b border-white/20 shadow-sm'
-          : 'bg-transparent'
+          : isHomePage
+          ? 'bg-transparent'
+          : 'bg-gray-50 shadow-sm' // subtle gray background on non-home pages
       }`}
     >
-      <div className="max-w-7xl mx-auto px-4">
+      <div className={`max-w-7xl mx-auto px-4`}>
         <div className="flex items-center justify-between h-16">
 
-          {/* Logo (ALWAYS visible) */}
+          {/* Logo */}
           <Link to="/" className="flex items-center">
             <div className="text-2xl mr-2">🌱</div>
             <span
               className={`text-xl font-semibold transition-colors ${
-                scrolled ? 'text-gray-900' : 'text-white'
+                scrolled
+                  ? 'text-gray-900'
+                  : isHomePage
+                  ? 'text-white'
+                  : 'text-gray-900'
               }`}
             >
               FIBI
@@ -51,15 +57,13 @@ export function Navigation() {
 
           {/* Navigation Links */}
           <div className="flex items-center gap-1">
-            
-            {/* Hide these when scrolling */}
-            {!scrolled && (
+            {(!isHomePage || !scrolled) && (
               <>
                 <Link to="/">
                   <Button
                     variant="ghost"
                     className={`transition-colors ${
-                      scrolled
+                      scrolled || !isHomePage
                         ? 'text-gray-800 hover:bg-gray-100'
                         : 'text-white hover:bg-white/20'
                     }`}
@@ -73,7 +77,7 @@ export function Navigation() {
                   <Button
                     variant="ghost"
                     className={`transition-colors ${
-                      scrolled
+                      scrolled || !isHomePage
                         ? 'text-gray-800 hover:bg-gray-100'
                         : 'text-white hover:bg-white/20'
                     }`}
@@ -88,7 +92,7 @@ export function Navigation() {
                     <Button
                       variant="ghost"
                       className={`transition-colors ${
-                        scrolled
+                        scrolled || !isHomePage
                           ? 'text-gray-800 hover:bg-gray-100'
                           : 'text-white hover:bg-white/20'
                       }`}
@@ -106,14 +110,13 @@ export function Navigation() {
           <div className="flex items-center gap-2">
             {isAuthenticated ? (
               <>
-                {/* Hide dropdown when scrolling */}
                 {!scrolled && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="outline"
                         className={`transition-colors ${
-                          scrolled
+                          scrolled || !isHomePage
                             ? 'border-gray-300 text-gray-900'
                             : 'border-white text-white'
                         }`}
@@ -142,13 +145,13 @@ export function Navigation() {
               </>
             ) : (
               <>
-                {/* Hide Login when scrolling */}
+                {/* Login button now shows on all pages, respects scroll */}
                 {!scrolled && (
                   <Link to="/login">
                     <Button
                       variant="ghost"
                       className={`transition-colors ${
-                        scrolled
+                        scrolled || !isHomePage
                           ? 'text-gray-800 hover:bg-gray-100'
                           : 'text-white hover:bg-white/20'
                       }`}
@@ -158,7 +161,6 @@ export function Navigation() {
                   </Link>
                 )}
 
-                {/* Sign Up ALWAYS visible */}
                 <Link to="/signup">
                   <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
                     Join Investment
@@ -167,7 +169,6 @@ export function Navigation() {
               </>
             )}
           </div>
-
         </div>
       </div>
     </nav>
