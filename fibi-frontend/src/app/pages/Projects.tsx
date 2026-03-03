@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { MapPin, TrendingUp, Users, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MapPin, TrendingUp, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { projects } from '../data/projects';
 import { Card, CardContent, CardHeader } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -74,51 +74,44 @@ export default function Projects() {
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* HEADER SECTION */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          {/* Title */}
-          <h1 className="text-4xl font-bold text-gray-900 mb-6">
+      {/* HERO SECTION WITH CAROUSEL */}
+      <div className="relative w-full h-80 md:h-96">
+        <img
+          src={sliderImages[currentSlide]}
+          alt="Investment Highlight"
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${fade ? 'opacity-0' : 'opacity-100'}`}
+        />
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0 flex items-center justify-center z-10">
+          <h1 className="text-4xl md:text-5xl font-bold text-white text-center">
             Investment Opportunities
           </h1>
         </div>
 
-        {/* IMAGE CAROUSEL FULL WIDTH */}
-        <div className="relative w-full h-64 md:h-80">
-          <img
-            src={sliderImages[currentSlide]}
-            alt="Investment Highlight"
-            className={`w-full h-full object-cover transition-opacity duration-300 ${fade ? 'opacity-0' : 'opacity-100'}`}
-          />
+        <button
+          onClick={prevSlide}
+          className="absolute top-1/2 -translate-y-1/2 left-4 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full z-20"
+        >
+          <ChevronLeft />
+        </button>
 
-          {/* Left Arrow */}
-          <button
-            onClick={prevSlide}
-            className="absolute top-1/2 -translate-y-1/2 left-4 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full z-10"
-          >
-            <ChevronLeft />
-          </button>
+        <button
+          onClick={nextSlide}
+          className="absolute top-1/2 -translate-y-1/2 right-4 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full z-20"
+        >
+          <ChevronRight />
+        </button>
 
-          {/* Right Arrow */}
-          <button
-            onClick={nextSlide}
-            className="absolute top-1/2 -translate-y-1/2 right-4 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full z-10"
-          >
-            <ChevronRight />
-          </button>
-
-          {/* Dots */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2 z-10">
-            {sliderImages.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => goToSlide(index)}
-                className={`h-2 w-2 rounded-full ${
-                  currentSlide === index ? 'bg-emerald-600' : 'bg-gray-300'
-                }`}
-              />
-            ))}
-          </div>
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex space-x-2 z-20">
+          {sliderImages.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => goToSlide(index)}
+              className={`h-2 w-2 rounded-full ${
+                currentSlide === index ? 'bg-emerald-600' : 'bg-white/60'
+              }`}
+            />
+          ))}
         </div>
       </div>
 
@@ -178,14 +171,7 @@ export default function Projects() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
-                      <div>
-                        <div className="flex items-center text-gray-600 text-xs mb-1">
-                          <Users className="h-3 w-3 mr-1" />
-                          Investors
-                        </div>
-                        <div className="text-gray-900">{project.investors}</div>
-                      </div>
+                    <div className="grid grid-cols-1 gap-4 pt-4 border-t border-gray-200">
                       <div>
                         <div className="flex items-center text-gray-600 text-xs mb-1">
                           <Calendar className="h-3 w-3 mr-1" />
