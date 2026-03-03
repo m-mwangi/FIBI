@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { useEffect, useState } from 'react';
+import logo from "../../assets/logo.svg";
 
 export function Navigation() {
   const location = useLocation();
@@ -41,20 +42,18 @@ export function Navigation() {
 
           {/* Logo - ALWAYS visible on home even when scrolled */}
           <Link to="/" className="flex items-center">
-            <div className="text-2xl mr-2">🌱</div>
-            <span
-              className={`text-xl font-semibold transition-colors ${
-                isHomePage
-                  ? scrolled
-                    ? 'text-black'  // scrolling on home page (over white sections)
-                    : 'text-white'  // hero section
-                  : 'text-white'    // all other pages
-              }`}
-            >
-              FIBI
-            </span>
-          </Link>
-
+  <img
+    src={logo}
+    alt="FIBI"
+    className={`h-35 w-auto transition-all ${
+      isHomePage
+        ? scrolled
+          ? 'invert-0'
+          : 'invert'
+        : 'invert'
+    }`}
+  />
+</Link>
           {/* Middle Navigation Links */}
           <div
             className={`flex items-center gap-1 transition-opacity duration-300 ${
