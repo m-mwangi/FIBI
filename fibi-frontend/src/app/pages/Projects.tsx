@@ -12,10 +12,10 @@ export default function Projects() {
   const [fade, setFade] = useState(false);
 
   const sliderImages = [
-    "https://images.unsplash.com/photo-1580674285054-bed31e145f59",
-    "https://images.unsplash.com/photo-1509395176047-4a66953fd231",
-    "https://images.unsplash.com/photo-1560493676-04071c5f467b",
-    "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee"
+    "/images/hero5.jpeg",
+    "/images/hero6.jpg",
+    "/images/hero7.png",
+    "/images/hero8.jpg"
   ];
 
   const nextSlide = () => {

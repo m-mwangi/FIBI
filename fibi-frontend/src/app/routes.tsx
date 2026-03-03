@@ -17,8 +17,8 @@ export const router = createBrowserRouter([
       { index: true, Component: Home },
       { path: 'projects', Component: Projects },
       { path: 'projects/:id', Component: ProjectDetail },
-      { 
-        path: 'dashboard', 
+      {
+        path: 'dashboard',
         element: (
           <ProtectedRoute>
             <Dashboard />

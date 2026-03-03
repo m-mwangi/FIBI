@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router';
-import { ArrowLeft, MapPin, TrendingUp, Users, Calendar, Clock, CheckCircle2, Circle } from 'lucide-react';
+import { ArrowLeft, MapPin, TrendingUp, Users, Clock, CheckCircle2, Circle } from 'lucide-react';
 import { projects } from '../data/projects';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -9,11 +9,15 @@ import { Progress } from '../components/ui/progress';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Separator } from '../components/ui/separator';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function ProjectDetail() {
   const { id } = useParams();
   const project = projects.find(p => p.id === id);
   const [investmentAmount, setInvestmentAmount] = useState('');
+
+  const [currentImage, setCurrentImage] = useState(0);
+  const images = project?.images || (project ? [project.imageUrl] : []);
 
   if (!project) {
     return (
@@ -30,7 +34,10 @@ export default function ProjectDetail() {
 
   const fundingPercentage = (project.currentFunding / project.totalFunding) * 100;
   const remainingFunding = project.totalFunding - project.currentFunding;
-  const daysRemaining = Math.ceil((new Date(project.fundingDeadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+  const daysRemaining = Math.ceil(
+    (new Date(project.fundingDeadline).getTime() - new Date().getTime()) /
+      (1000 * 60 * 60 * 24)
+  );
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -69,30 +76,77 @@ export default function ProjectDetail() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <Link to="/projects" className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-4">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Projects
-          </Link>
-        </div>
-      </div>
-
+    <div className="min-h-screen bg-gray-50 relative">
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Hero Image */}
-            <div className="relative h-96 rounded-lg overflow-hidden">
-              <img 
-                src={project.imageUrl} 
-                alt={project.title}
-                className="w-full h-full object-cover"
-              />
-            </div>
+            <div className="lg:col-span-2 space-y-6">
+  {/* Back Button — now in normal flow, above carousel */}
+  <Link
+  to="/projects"
+  className="
+    inline-flex items-center gap-1
+    font-medium text-sm
+    bg-emerald-600 hover:bg-emerald-700
+    text-white
+    px-4 py-2
+    rounded-full
+    shadow-lg
+    transition
+    duration-200
+    z-50
+  "
+>
+  <ArrowLeft size={16} />
+  Back to Projects
+</Link>
+  {/* Hero Image Carousel */}
+  <div className="relative h-96 rounded-lg overflow-hidden mt-2">
+    <img
+      src={images[currentImage]}
+      alt={`${project.title} image ${currentImage + 1}`}
+      className="w-full h-full object-cover transition-opacity duration-300"
+    />
 
+    {/* Left Chevron */}
+    {images.length > 1 && (
+      <button
+        onClick={() =>
+          setCurrentImage(prev => (prev === 0 ? images.length - 1 : prev - 1))
+        }
+        className="absolute top-1/2 -translate-y-1/2 left-4 bg-black/30 hover:bg-black/50 text-white p-3 rounded-full shadow-md z-20 transition"
+      >
+        <ChevronLeft size={24} />
+      </button>
+    )}
+
+    {/* Right Chevron */}
+    {images.length > 1 && (
+      <button
+        onClick={() => setCurrentImage((prev) => (prev + 1) % images.length)}
+        className="absolute top-1/2 -translate-y-1/2 right-4 bg-black/30 hover:bg-black/50 text-white p-3 rounded-full shadow-md z-20 transition"
+      >
+        <ChevronRight size={24} />
+      </button>
+    )}
+
+    {/* Pagination Dots */}
+    {images.length > 1 && (
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2 z-20">
+        {images.map((_, idx) => (
+          <button
+            key={idx}
+            onClick={() => setCurrentImage(idx)}
+            className={`h-2 w-2 rounded-full transition-colors ${
+              currentImage === idx ? 'bg-emerald-600' : 'bg-white/60'
+            }`}
+          />
+        ))}
+      </div>
+    )}
+  </div>
+</div>
             {/* Project Info */}
             <Card>
               <CardHeader>
@@ -140,9 +194,7 @@ export default function ProjectDetail() {
                 <div className="space-y-6">
                   {project.timeline.map((phase, index) => (
                     <div key={index} className="flex items-start gap-4">
-                      <div className="flex-shrink-0">
-                        {getStatusIcon(phase.status)}
-                      </div>
+                      <div className="flex-shrink-0">{getStatusIcon(phase.status)}</div>
                       <div className="flex-1">
                         <h4 className="text-gray-900 mb-1">{phase.phase}</h4>
                         <p className="text-sm text-gray-600 capitalize">{phase.status.replace('-', ' ')}</p>
@@ -228,7 +280,7 @@ export default function ProjectDetail() {
                       type="number"
                       placeholder={`Min. ${formatCurrency(project.minInvestment)}`}
                       value={investmentAmount}
-                      onChange={(e) => setInvestmentAmount(e.target.value)}
+                      onChange={e => setInvestmentAmount(e.target.value)}
                       className="mt-1"
                       min={project.minInvestment}
                     />
@@ -287,10 +339,10 @@ export default function ProjectDetail() {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Funding Deadline</span>
                   <span className="text-gray-900">
-                    {new Date(project.fundingDeadline).toLocaleDateString('en-US', { 
-                      month: 'short', 
-                      day: 'numeric', 
-                      year: 'numeric' 
+                    {new Date(project.fundingDeadline).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
                     })}
                   </span>
                 </div>

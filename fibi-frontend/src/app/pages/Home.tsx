@@ -57,7 +57,7 @@ export default function Home() {
     <img
       src="/images/hero4.png"
       alt="Why Choose FIBI"
-      className="w-full h-[500px] object-cover"
+      className="w-full h-[350px] object-cover"
     />
   </div>
 

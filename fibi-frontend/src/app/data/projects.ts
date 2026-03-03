@@ -15,6 +15,7 @@ export interface Project {
   description: string;
   features: string[];
   imageUrl: string;
+  images?: string[]; // Added array for multiple images
   status: 'open' | 'funded' | 'active';
   timeline: { phase: string; status: 'completed' | 'in-progress' | 'upcoming' }[];
 }
@@ -42,7 +43,20 @@ export const projects: Project[] = [
       'Year-round tourism demand',
     ],
     imageUrl:
-      'https://images.unsplash.com/photo-1657737738312-0f524f5ed190?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+      '/images/capsule1.jpg',
+    images: [
+      '/images/capsule1.jpg',
+      '/images/capsule2.jpg',
+      '/images/capsule3.jpg',
+      '/images/capsule4.png',
+      '/images/capsule5.jpg',
+      '/images/capsule6.jpg',
+      '/images/capsule7.png',
+      '/images/capsule10.jpg',
+      '/images/capsule12.jpeg',
+      '/images/capsule13.jpg',
+      '/images/capsule14.jpg',
+    ],
     status: 'open',
     timeline: [
       { phase: 'Land Acquisition', status: 'completed' },
