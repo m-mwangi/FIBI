@@ -54,14 +54,24 @@ export default function Home() {
             {/* Features */}
 <section className="bg-white">
 
-  {/* FULL WIDTH Image */}
-  <div className="w-full">
-    <img
-      src="/images/hero4.png"
-      alt="Why Choose FIBI"
-      className="w-full h-[350px] object-cover"
-    />
+  {/* FULL WIDTH Image with overlay text */}
+<div className="relative w-full h-[350px]">
+  <img
+    src="/images/hero4.png"
+    alt="Kenya's World Garden"
+    className="w-full h-full object-cover"
+  />
+  
+  {/* Semi-transparent overlay */}
+  <div className="absolute inset-0 bg-black/40"></div>
+
+  {/* Centered text */}
+  <div className="absolute inset-0 flex items-center justify-center">
+    <h2 className="text-white text-4xl md:text-5xl font-bold text-center drop-shadow-lg px-4">
+      Kenya's World Garden
+    </h2>
   </div>
+</div>
 
   {/* Content */}
   <div className="py-20 px-4">

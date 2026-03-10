@@ -7,12 +7,13 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
 import { Alert, AlertDescription } from '../components/ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Users, ShieldCheck } from 'lucide-react';
 import logo from '../../assets/logo.svg';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState<'investor' | 'admin'>('investor');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -27,7 +28,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const success = await login(email, password);
+      const success = await login(email, password, role);
       if (success) {
         navigate(from, { replace: true });
       } else {
@@ -51,6 +52,33 @@ export default function Login() {
           <p className="text-gray-500 mt-2 text-sm">Welcome back! Log in to your account</p>
         </div>
 
+        {/* Role Toggle */}
+        <div className="flex border rounded-full overflow-hidden mb-6 shadow-sm">
+          <button
+            type="button"
+            className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium transition ${
+              role === 'investor'
+                ? 'bg-emerald-600 text-white'
+                : 'bg-white text-gray-700'
+            }`}
+            onClick={() => setRole('investor')}
+          >
+            <Users className="h-4 w-4" /> Investor
+          </button>
+          <button
+            type="button"
+            className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium transition ${
+              role === 'admin'
+                ? 'bg-emerald-600 text-white'
+                : 'bg-white text-gray-700'
+            }`}
+            onClick={() => setRole('admin')}
+          >
+            <ShieldCheck className="h-4 w-4" /> Admin
+          </button>
+        </div>
+
+        {/* Login Card */}
         <Card className="shadow-xl border-0">
           <CardContent className="p-8">
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -94,19 +122,25 @@ export default function Login() {
               </Button>
 
               <div className="text-center text-sm text-gray-600">
-                Don't have an account?{' '}
-                <Link
-                  to="/signup"
-                  className="text-emerald-600 font-medium hover:text-emerald-700"
-                >
-                  Sign up
-                </Link>
+                {role === 'investor' ? (
+                  <>
+                    Don't have an account?{' '}
+                    <Link
+                      to="/signup"
+                      className="text-emerald-600 font-medium hover:text-emerald-700"
+                    >
+                      Sign up
+                    </Link>
+                  </>
+                ) : (
+                  <span className="text-gray-400">Admin access only</span>
+                )}
               </div>
             </form>
           </CardContent>
         </Card>
 
-        {/* Back to home as elevated button */}
+        {/* Back to home elevated */}
         <div className="text-center mt-6">
           <Link
             to="/"
