@@ -1,16 +1,22 @@
 import { Link } from 'react-router';
+import logo from '../../assets/logo.svg';
 
 export function Footer() {
   return (
     <footer className="bg-gray-900 text-gray-300 mt-auto">
       <div className="max-w-7xl mx-auto px-4 py-12">
         <div className="grid md:grid-cols-4 gap-8">
+          
           {/* Brand */}
           <div>
             <div className="flex items-center mb-4">
-              <div className="text-2xl text-emerald-500 mr-2">🌱</div>
-              <span className="text-xl text-white">FIBI</span>
+              <img
+                src={logo}
+                alt="FIBI"
+                className="h-30 w-auto invert"
+              />
             </div>
+
             <p className="text-sm text-gray-400">
               Fractional land investment platform enabling sustainable wealth creation through collective ownership.
             </p>
@@ -96,6 +102,7 @@ export function Footer() {
               </li>
             </ul>
           </div>
+
         </div>
 
         <div className="border-t border-gray-800 mt-8 pt-8 text-sm text-center text-gray-400">

@@ -97,7 +97,7 @@ export const projects: Project[] = [
     ],
   },
   {
-    id: '4',
+    id: '3',
     title: 'Mt. Kenya Avocado Farm',
     location: 'Nyeri County, Kenya',
     category: 'agriculture',
@@ -118,7 +118,15 @@ export const projects: Project[] = [
       'Sustainable farming practices',
     ],
     imageUrl:
-      'https://images.unsplash.com/photo-1758524056596-af1c19797d01?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+      '/images/avocado2.jpeg',
+    images: [
+      '/images/avocado1.jpeg',
+      '/images/avocado2.jpeg',
+      '/images/avocado3.jpeg',
+      '/images/avocado4.jpeg',
+      '/images/avocado5.jpeg',
+    ],
+
     status: 'open',
     timeline: [
       { phase: 'Land Preparation', status: 'completed' },
@@ -150,7 +158,7 @@ export const mockUserInvestments = [
     investmentDate: '2026-01-15',
   },
   {
-    projectId: '4',
+    projectId: '3',
     projectTitle: 'Mt. Kenya Avocado Farm',
     amountInvested: 1500,
     currentValue: 1720,

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router';
-import { ArrowLeft, MapPin, TrendingUp, Users, Clock, CheckCircle2, Circle } from 'lucide-react';
+import { ArrowLeft, MapPin, TrendingUp, CheckCircle2, Circle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { projects } from '../data/projects';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -9,7 +9,6 @@ import { Progress } from '../components/ui/progress';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Separator } from '../components/ui/separator';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function ProjectDetail() {
   const { id } = useParams();
@@ -34,10 +33,6 @@ export default function ProjectDetail() {
 
   const fundingPercentage = (project.currentFunding / project.totalFunding) * 100;
   const remainingFunding = project.totalFunding - project.currentFunding;
-  const daysRemaining = Math.ceil(
-    (new Date(project.fundingDeadline).getTime() - new Date().getTime()) /
-      (1000 * 60 * 60 * 24)
-  );
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -80,72 +75,61 @@ export default function ProjectDetail() {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="lg:col-span-2 space-y-6">
-  {/* Back Button — now in normal flow, above carousel */}
-  <Link
-  to="/projects"
-  className="
-    inline-flex items-center gap-1
-    font-medium text-sm
-    bg-emerald-600 hover:bg-emerald-700
-    text-white
-    px-4 py-2
-    rounded-full
-    shadow-lg
-    transition
-    duration-200
-    z-50
-  "
->
-  <ArrowLeft size={16} />
-  Back to Projects
-</Link>
-  {/* Hero Image Carousel */}
-  <div className="relative h-96 rounded-lg overflow-hidden mt-2">
-    <img
-      src={images[currentImage]}
-      alt={`${project.title} image ${currentImage + 1}`}
-      className="w-full h-full object-cover transition-opacity duration-300"
-    />
+            {/* Back Button */}
+            <Link
+              to="/projects"
+              className="inline-flex items-center gap-1 font-medium text-sm bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-full shadow-lg transition duration-200 z-50"
+            >
+              <ArrowLeft size={16} />
+              Back to Projects
+            </Link>
 
-    {/* Left Chevron */}
-    {images.length > 1 && (
-      <button
-        onClick={() =>
-          setCurrentImage(prev => (prev === 0 ? images.length - 1 : prev - 1))
-        }
-        className="absolute top-1/2 -translate-y-1/2 left-4 bg-black/30 hover:bg-black/50 text-white p-3 rounded-full shadow-md z-20 transition"
-      >
-        <ChevronLeft size={24} />
-      </button>
-    )}
+            {/* Hero Image Carousel */}
+            <div className="relative h-96 rounded-lg overflow-hidden mt-2">
+              <img
+                src={images[currentImage]}
+                alt={`${project.title} image ${currentImage + 1}`}
+                className="w-full h-full object-cover transition-opacity duration-300"
+              />
 
-    {/* Right Chevron */}
-    {images.length > 1 && (
-      <button
-        onClick={() => setCurrentImage((prev) => (prev + 1) % images.length)}
-        className="absolute top-1/2 -translate-y-1/2 right-4 bg-black/30 hover:bg-black/50 text-white p-3 rounded-full shadow-md z-20 transition"
-      >
-        <ChevronRight size={24} />
-      </button>
-    )}
+              {/* Left Chevron */}
+              {images.length > 1 && (
+                <button
+                  onClick={() =>
+                    setCurrentImage(prev => (prev === 0 ? images.length - 1 : prev - 1))
+                  }
+                  className="absolute top-1/2 -translate-y-1/2 left-4 bg-black/30 hover:bg-black/50 text-white p-3 rounded-full shadow-md z-20 transition"
+                >
+                  <ChevronLeft size={24} />
+                </button>
+              )}
 
-    {/* Pagination Dots */}
-    {images.length > 1 && (
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2 z-20">
-        {images.map((_, idx) => (
-          <button
-            key={idx}
-            onClick={() => setCurrentImage(idx)}
-            className={`h-2 w-2 rounded-full transition-colors ${
-              currentImage === idx ? 'bg-emerald-600' : 'bg-white/60'
-            }`}
-          />
-        ))}
-      </div>
-    )}
-  </div>
-</div>
+              {/* Right Chevron */}
+              {images.length > 1 && (
+                <button
+                  onClick={() => setCurrentImage((prev) => (prev + 1) % images.length)}
+                  className="absolute top-1/2 -translate-y-1/2 right-4 bg-black/30 hover:bg-black/50 text-white p-3 rounded-full shadow-md z-20 transition"
+                >
+                  <ChevronRight size={24} />
+                </button>
+              )}
+
+              {/* Pagination Dots */}
+              {images.length > 1 && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2 z-20">
+                  {images.map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setCurrentImage(idx)}
+                      className={`h-2 w-2 rounded-full transition-colors ${
+                        currentImage === idx ? 'bg-emerald-600' : 'bg-white/60'
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Project Info */}
             <Card>
               <CardHeader>
@@ -250,26 +234,6 @@ export default function ProjectDetail() {
 
                 <Separator />
 
-                {/* Stats */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="flex items-center text-gray-600 text-sm mb-1">
-                      <Users className="h-4 w-4 mr-1" />
-                      Investors
-                    </div>
-                    <div className="text-2xl text-gray-900">{project.investors}</div>
-                  </div>
-                  <div>
-                    <div className="flex items-center text-gray-600 text-sm mb-1">
-                      <Clock className="h-4 w-4 mr-1" />
-                      Days Left
-                    </div>
-                    <div className="text-2xl text-gray-900">{daysRemaining}</div>
-                  </div>
-                </div>
-
-                <Separator />
-
                 {/* Investment Calculator */}
                 <div className="space-y-4">
                   <div>
@@ -313,37 +277,6 @@ export default function ProjectDetail() {
                   <p className="text-xs text-gray-500 text-center">
                     Investments are subject to terms and conditions
                   </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Quick Stats */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Quick Stats</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Total Funding Goal</span>
-                  <span className="text-gray-900">{formatCurrency(project.totalFunding)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Min. Investment</span>
-                  <span className="text-gray-900">{formatCurrency(project.minInvestment)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Total Investors</span>
-                  <span className="text-gray-900">{project.investors}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Funding Deadline</span>
-                  <span className="text-gray-900">
-                    {new Date(project.fundingDeadline).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
-                  </span>
                 </div>
               </CardContent>
             </Card>
