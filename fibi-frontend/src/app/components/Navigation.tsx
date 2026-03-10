@@ -42,18 +42,19 @@ export function Navigation() {
 
           {/* Logo - ALWAYS visible on home even when scrolled */}
           <Link to="/" className="flex items-center">
-  <img
-    src={logo}
-    alt="FIBI"
-    className={`h-35 w-auto transition-all ${
-      isHomePage
-        ? scrolled
-          ? 'invert-0'
-          : 'invert'
-        : 'invert'
-    }`}
-  />
-</Link>
+            <img
+              src={logo}
+              alt="FIBI"
+              className={`h-35 w-auto transition-all ${
+                isHomePage
+                  ? scrolled
+                    ? 'invert-0'
+                    : 'invert'
+                  : 'invert'
+              }`}
+            />
+          </Link>
+
           {/* Middle Navigation Links */}
           <div
             className={`flex items-center gap-1 transition-opacity duration-300 ${
@@ -131,7 +132,10 @@ export function Navigation() {
                       </Button>
                     </DropdownMenuTrigger>
 
-                    <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuContent
+                      align="end"
+                      className="w-56 z-[100] bg-white"
+                    >
                       <DropdownMenuLabel>My Account</DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>

@@ -51,8 +51,7 @@ export default function ProjectDetail() {
   const getCategoryLabel = (category: string) => {
     const labels: Record<string, string> = {
       'eco-lodge': 'Eco Lodge',
-      'solar-farm': 'Solar Farm',
-      'agroforestry': 'Agroforestry',
+      'solar-roof': 'Solar Roof',
       'agriculture': 'Agriculture',
     };
     return labels[category] || category;

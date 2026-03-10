@@ -69,7 +69,7 @@ export const projects: Project[] = [
     id: '2',
     title: 'Solar Roofs Initiative',
     location: 'Kenya',
-    category: 'solar-farm',
+    category: 'solar-roof',
     minInvestment: 1000,
     totalFunding: 1200000,
     currentFunding: 960000,
