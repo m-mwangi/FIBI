@@ -1,21 +1,28 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+
+import { Card, CardContent } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
 import { Alert, AlertDescription } from '../components/ui/alert';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+
+import { AlertCircle } from 'lucide-react';
+import logo from '../../assets/logo.svg';
 
 export default function Signup() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [dob, setDob] = useState('');
+  const [country, setCountry] = useState('');
+  const [idType, setIdType] = useState('passport');
+  const [idNumber, setIdNumber] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const { signup } = useAuth();
   const navigate = useNavigate();
 
@@ -23,19 +30,16 @@ export default function Signup() {
     e.preventDefault();
     setError('');
 
-    // Validation
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-
     if (password.length < 6) {
       setError('Password must be at least 6 characters');
       return;
     }
 
     setIsLoading(true);
-
     try {
       const success = await signup(name, email, password);
       if (success) {
@@ -43,7 +47,7 @@ export default function Signup() {
       } else {
         setError('An account with this email already exists');
       }
-    } catch (err) {
+    } catch {
       setError('An error occurred. Please try again.');
     } finally {
       setIsLoading(false);
@@ -53,22 +57,16 @@ export default function Signup() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 px-4 py-12">
       <div className="w-full max-w-md">
+        {/* Logo */}
         <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center justify-center mb-4">
-            <div className="text-4xl text-emerald-600 mr-2">🌱</div>
-            <span className="text-3xl text-gray-900">FIBI</span>
+          <Link to="/" className="inline-block">
+            <img src={logo} alt="FIBI Logo" className="mx-auto h-30 w-auto" />
           </Link>
-          <p className="text-gray-600">Create your account to start investing</p>
+          <p className="text-gray-500 mt-2 text-sm">Create your investor account</p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Sign Up</CardTitle>
-            <CardDescription>
-              Join thousands of investors building sustainable wealth
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <Card className="shadow-xl border-0">
+          <CardContent className="p-8">
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
                 <Alert variant="destructive">
@@ -77,10 +75,9 @@ export default function Signup() {
                 </Alert>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+              <div className="space-y-3">
+                <Label>Full Name</Label>
                 <Input
-                  id="name"
                   type="text"
                   placeholder="John Doe"
                   value={name}
@@ -90,10 +87,9 @@ export default function Signup() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+              <div className="space-y-3">
+                <Label>Email Address</Label>
                 <Input
-                  id="email"
                   type="email"
                   placeholder="you@example.com"
                   value={email}
@@ -103,25 +99,73 @@ export default function Signup() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <Label>Date of Birth</Label>
+                  <Input
+                    type="date"
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+                <div className="space-y-3">
+                  <Label>Country</Label>
+                  <Input
+                    type="text"
+                    placeholder="Kenya"
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <Label>ID Type</Label>
+                  <select
+                    value={idType}
+                    onChange={(e) => setIdType(e.target.value)}
+                    className="w-full border rounded-md p-2 bg-white"
+                    disabled={isLoading}
+                  >
+                    <option value="passport">Passport</option>
+                    <option value="national-id">National ID</option>
+                    <option value="drivers-license">Driver's License</option>
+                  </select>
+                </div>
+                <div className="space-y-3">
+                  <Label>ID Number</Label>
+                  <Input
+                    type="text"
+                    placeholder="Document number"
+                    value={idNumber}
+                    onChange={(e) => setIdNumber(e.target.value)}
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label>Password</Label>
                 <Input
-                  id="password"
                   type="password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  disabled={isLoading}
                   minLength={6}
+                  disabled={isLoading}
                 />
-                <p className="text-xs text-gray-500">Must be at least 6 characters</p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <div className="space-y-3">
+                <Label>Confirm Password</Label>
                 <Input
-                  id="confirmPassword"
                   type="password"
                   placeholder="••••••••"
                   value={confirmPassword}
@@ -131,23 +175,9 @@ export default function Signup() {
                 />
               </div>
 
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 flex-shrink-0" />
-                  <div className="text-emerald-800">
-                    <p className="font-medium mb-1">What you get:</p>
-                    <ul className="space-y-1 text-xs">
-                      <li>• Access to vetted investment opportunities</li>
-                      <li>• Portfolio tracking dashboard</li>
-                      <li>• Monthly earnings reports</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              <Button 
-                type="submit" 
-                className="w-full bg-emerald-600 hover:bg-emerald-700"
+              <Button
+                type="submit"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-11"
                 disabled={isLoading}
               >
                 {isLoading ? 'Creating account...' : 'Create Account'}
@@ -155,23 +185,16 @@ export default function Signup() {
 
               <div className="text-center text-sm text-gray-600">
                 Already have an account?{' '}
-                <Link to="/login" className="text-emerald-600 hover:text-emerald-700 font-medium">
+                <Link
+                  to="/login"
+                  className="text-emerald-600 font-medium hover:text-emerald-700"
+                >
                   Log in
                 </Link>
               </div>
-
-              <p className="text-xs text-gray-500 text-center pt-4 border-t border-gray-200">
-                By signing up, you agree to our Terms of Service and Privacy Policy
-              </p>
             </form>
           </CardContent>
         </Card>
-
-        <div className="text-center mt-6">
-          <Link to="/" className="text-sm text-gray-600 hover:text-gray-900">
-            ← Back to home
-          </Link>
-        </div>
       </div>
     </div>
   );

@@ -9,8 +9,10 @@ export default function Home() {
   const { isAuthenticated } = useAuth();
 
   const images = [
-    "/images/hero1.jpeg",
-    "/images/hero2.jpeg",
+    "/images/hero9.jpeg",
+    "/images/hero10.jpeg",
+    "/images/hero11.jpeg",
+    "/images/hero12.jpeg",
   ];
 
   const [currentImage, setCurrentImage] = useState(0);

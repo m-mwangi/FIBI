@@ -1,23 +1,24 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../context/AuthContext';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+
+import { Card, CardContent } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { AlertCircle } from 'lucide-react';
+import logo from '../../assets/logo.svg';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-
   const from = (location.state as any)?.from?.pathname || '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,7 +33,7 @@ export default function Login() {
       } else {
         setError('Invalid email or password. Please try again.');
       }
-    } catch (err) {
+    } catch {
       setError('An error occurred. Please try again.');
     } finally {
       setIsLoading(false);
@@ -42,22 +43,16 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 px-4 py-12">
       <div className="w-full max-w-md">
+        {/* Logo */}
         <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center justify-center mb-4">
-            <div className="text-4xl text-emerald-600 mr-2">🌱</div>
-            <span className="text-3xl text-gray-900">FIBI</span>
+          <Link to="/" className="inline-block">
+            <img src={logo} alt="FIBI Logo" className="mx-auto h-30 w-auto" />
           </Link>
-          <p className="text-gray-600">Welcome back! Log in to your account</p>
+          <p className="text-gray-500 mt-2 text-sm">Welcome back! Log in to your account</p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Log In</CardTitle>
-            <CardDescription>
-              Enter your credentials to access your dashboard
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <Card className="shadow-xl border-0">
+          <CardContent className="p-8">
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
                 <Alert variant="destructive">
@@ -66,10 +61,9 @@ export default function Login() {
                 </Alert>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+              <div className="space-y-3">
+                <Label>Email Address</Label>
                 <Input
-                  id="email"
                   type="email"
                   placeholder="you@example.com"
                   value={email}
@@ -79,10 +73,9 @@ export default function Login() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+              <div className="space-y-3">
+                <Label>Password</Label>
                 <Input
-                  id="password"
                   type="password"
                   placeholder="••••••••"
                   value={password}
@@ -92,9 +85,9 @@ export default function Login() {
                 />
               </div>
 
-              <Button 
-                type="submit" 
-                className="w-full bg-emerald-600 hover:bg-emerald-700"
+              <Button
+                type="submit"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-11"
                 disabled={isLoading}
               >
                 {isLoading ? 'Logging in...' : 'Log In'}
@@ -102,22 +95,23 @@ export default function Login() {
 
               <div className="text-center text-sm text-gray-600">
                 Don't have an account?{' '}
-                <Link to="/signup" className="text-emerald-600 hover:text-emerald-700 font-medium">
+                <Link
+                  to="/signup"
+                  className="text-emerald-600 font-medium hover:text-emerald-700"
+                >
                   Sign up
                 </Link>
-              </div>
-
-              <div className="pt-4 border-t border-gray-200">
-                <p className="text-xs text-gray-500 text-center">
-                  Demo credentials: Try any email/password combination after signing up
-                </p>
               </div>
             </form>
           </CardContent>
         </Card>
 
+        {/* Back to home as elevated button */}
         <div className="text-center mt-6">
-          <Link to="/" className="text-sm text-gray-600 hover:text-gray-900">
+          <Link
+            to="/"
+            className="inline-block bg-white shadow-md hover:shadow-lg px-6 py-2 rounded-full text-gray-700 font-medium transition-all duration-200"
+          >
             ← Back to home
           </Link>
         </div>

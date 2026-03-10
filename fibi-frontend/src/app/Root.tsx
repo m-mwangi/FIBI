@@ -5,15 +5,18 @@ import { Footer } from './components/Footer';
 export default function Root() {
   const location = useLocation();
 
-  // Hide Navigation on individual Project Detail pages
   const hideNavigation =
-    location.pathname.startsWith('/projects/') &&
-    location.pathname !== '/projects';
+    (location.pathname.startsWith('/projects/') &&
+      location.pathname !== '/projects') ||
+    location.pathname === '/login' ||
+    location.pathname === '/signup';
 
   return (
     <div className="flex flex-col min-h-screen">
       {!hideNavigation && <Navigation />}
-      <main className="flex-1">{/* Outlet will render page content */}<Outlet /></main>
+      <main className="flex-1">
+        <Outlet />
+      </main>
       <Footer />
     </div>
   );
