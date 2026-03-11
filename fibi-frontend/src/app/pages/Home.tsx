@@ -42,7 +42,7 @@ export default function Home() {
         </div>
         <div className="absolute inset-0 bg-black/50"></div>
         <div className="relative z-10 text-center max-w-4xl mx-auto px-4 text-white">
-          <h1 className="text-5xl md:text-6xl mb-6">
+          <h1 className="text-4xl md:text-5xl mb-6">
             Invest Together. Profit Together.
           </h1>
           <p className="text-xl max-w-2xl mx-auto">
@@ -67,7 +67,7 @@ export default function Home() {
 
   {/* Centered text */}
   <div className="absolute inset-0 flex items-center justify-center">
-    <h2 className="text-white text-4xl md:text-5xl font-bold text-center drop-shadow-lg px-4">
+    <h2 className="text-white text-3xl md:text-4xl font-bold text-center drop-shadow-lg px-4">
       Kenya's World Garden
     </h2>
   </div>
