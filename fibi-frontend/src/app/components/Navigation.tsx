@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { useEffect, useState } from 'react';
-import logo from "../../assets/logo.svg";
+import logo from "../../assets/fibi_logo.svg";
 
 export function Navigation() {
   const location = useLocation();
@@ -45,7 +45,7 @@ export function Navigation() {
             <img
               src={logo}
               alt="FIBI"
-              className={`h-35 w-auto transition-all ${
+              className={`h-38 w-auto transition-all ${
                 isHomePage
                   ? scrolled
                     ? 'invert-0'

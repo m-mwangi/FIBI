@@ -20,7 +20,7 @@ export default function Home() {
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentImage((prev) => (prev + 1) % images.length);
-    }, 5000);
+    }, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -135,60 +135,76 @@ export default function Home() {
   </div>
 </section>
 
-      {/* How It Works */}
+ {/* How It Works */}
 <section className="py-20 px-4 bg-gray-50">
   <div className="max-w-7xl mx-auto">
-    <h2 className="text-center text-3xl mb-12 text-gray-900">How It Works</h2>
+    {/* Title */}
+    <h2 className="text-center text-3xl mb-6 text-gray-900">How It Works</h2>
+
+    {/* Intro Paragraph */}
+    <p className="text-center max-w-3xl mx-auto mb-12 text-gray-600">
+      We are redefining how people participate in land ownership by making it more accessible, transparent, and impactful. Through responsible development and collaborative investment, we create opportunities for sustainable growth and reliable returns.
+    </p>
+
+    {/* Steps */}
     <div className="grid md:grid-cols-4 gap-8">
-      
-      <div className="text-center border border-gray-200 rounded-lg p-6 shadow-sm bg-white">
-        <div className="w-16 h-16 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">1</div>
-        <h3 className="mb-2 text-gray-900">Browse Land</h3>
-        <p className="text-gray-600">Explore vetted projects with expected returns and detailed information.</p>
-      </div>
-
-      <div className="text-center border border-gray-200 rounded-lg p-6 shadow-sm bg-white">
-        <div className="w-16 h-16 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">2</div>
-        <h3 className="mb-2 text-gray-900">Invest Together</h3>
-        <p className="text-gray-600">Contribute funds alongside other investors with low minimums.</p>
-      </div>
-
-      <div className="text-center border border-gray-200 rounded-lg p-6 shadow-sm bg-white">
-        <div className="w-16 h-16 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">3</div>
-        <h3 className="mb-2 text-gray-900">Build Sustainably</h3>
-        <p className="text-gray-600">We develop eco-friendly income structures on the land parcels.</p>
-      </div>
-
-      <div className="text-center border border-gray-200 rounded-lg p-6 shadow-sm bg-white">
-        <div className="w-16 h-16 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">4</div>
-        <h3 className="mb-2 text-gray-900">Earn Monthly</h3>
-        <p className="text-gray-600">Receive passive income from project operations regularly.</p>
-      </div>
-
+      {[ 
+        { num: 1, title: "Browse Land", text: "Explore vetted projects with expected returns and detailed information." },
+        { num: 2, title: "Invest Together", text: "Contribute funds alongside other investors with low minimums." },
+        { num: 3, title: "Build Sustainably", text: "We develop eco-friendly income structures on the land parcels." },
+        { num: 4, title: "Earn Monthly", text: "Receive passive income from project operations regularly." },
+      ].map((step) => (
+        <div
+          key={step.num}
+          className="text-center border border-gray-200 rounded-lg p-6 shadow-sm bg-white 
+                     transition-transform duration-300 ease-out hover:scale-105 hover:shadow-lg"
+        >
+          <div className="w-16 h-16 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+            {step.num}
+          </div>
+          <h3 className="mb-2 text-gray-900">{step.title}</h3>
+          <p className="text-gray-600">{step.text}</p>
+        </div>
+      ))}
     </div>
   </div>
 </section>
 
       {/* CTA Section */}
-      <section className="relative py-20 px-4 text-white overflow-hidden">
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: "url('/images/hero3.png')" }}
-        />
-        <div className="absolute inset-0 bg-black/60"></div>
-        <div className="relative z-10 max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl mb-4">Ready to Start Investing?</h2>
-          <p className="text-xl mb-8 text-gray-200">
-            Join thousands of investors building wealth through sustainable land development.
-          </p>
-          <Link to="/projects">
-            <Button size="lg" variant="secondary">
-              Explore Investment Opportunities
-            </Button>
-          </Link>
-        </div>
-      </section>
+<section className="relative pt-20 pb-0 px-4 overflow-visible">
+  {/* Background Image */}
+  <div
+    className="absolute inset-0 bg-cover bg-center"
+    style={{ backgroundImage: "url('/images/hero3.png')" }}
+  />
+  <div className="absolute inset-0 bg-black/60"></div>
 
+  {/* Floating Green Box */}
+  <div className="relative z-10">
+    <div className="bg-emerald-600 text-white p-12 md:p-16 shadow-2xl
+                    transform translate-y-1/4 md:translate-y-1/4
+                    w-full md:w-1/2 ml-auto">
+      {/* Heading */}
+      <h2 className="text-3xl md:text-4xl mb-4 font-bold">
+        Ready to Start Investing?
+      </h2>
+
+      {/* Paragraph */}
+      <p className="text-xl mb-8 text-gray-100">
+        Join thousands of investors building wealth through sustainable land development.
+      </p>
+
+      {/* Button */}
+      <div className="flex">
+        <Link to="/projects">
+          <Button size="lg" variant="secondary">
+            Explore Investment Opportunities
+          </Button>
+        </Link>
+      </div>
+    </div>
+  </div>
+</section>
     </div>
   );
 }

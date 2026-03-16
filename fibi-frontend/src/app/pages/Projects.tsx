@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import { MapPin, TrendingUp, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { projects } from '../data/projects';
@@ -8,8 +8,21 @@ import { Button } from '../components/ui/button';
 import { Progress } from '../components/ui/progress';
 
 export default function Projects() {
+  // Scroll to top when this page loads
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   const [currentSlide, setCurrentSlide] = useState(0);
   const [fade, setFade] = useState(false);
+  
+  useEffect(() => {
+  const interval = setInterval(() => {
+    nextSlide(); // move to next slide automatically
+  }, 2000); // every 5 seconds
+
+  return () => clearInterval(interval); // cleanup on unmount
+}, [currentSlide]);
 
   const sliderImages = [
     "/images/hero5.jpeg",

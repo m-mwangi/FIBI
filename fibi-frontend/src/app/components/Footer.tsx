@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import logo from '../../assets/logo.svg';
+import logo from '../../assets/fibi_logo.svg';
 
 export function Footer() {
   return (
@@ -13,7 +13,7 @@ export function Footer() {
               <img
                 src={logo}
                 alt="FIBI"
-                className="h-30 w-auto invert"
+                className="h-35 w-auto invert"
               />
             </div>
 
