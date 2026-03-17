@@ -8,7 +8,7 @@ import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { AlertCircle, Users, ShieldCheck } from 'lucide-react';
-import logo from '../../assets/logo.svg';
+import logo from '../../assets/fibi_logo.svg';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -51,7 +51,7 @@ export default function Login() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link to="/" className="inline-block">
-            <img src={logo} alt="FIBI Logo" className="mx-auto h-30 w-auto" />
+            <img src={logo} alt="FIBI Logo" className="mx-auto h-35 w-auto" />
           </Link>
           <p className="text-gray-500 mt-2 text-sm">Welcome back! Log in to your account</p>
         </div>

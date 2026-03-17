@@ -9,7 +9,7 @@ import { Button } from '../components/ui/button';
 import { Alert, AlertDescription } from '../components/ui/alert';
 
 import { AlertCircle } from 'lucide-react';
-import logo from '../../assets/logo.svg';
+import logo from '../../assets/fibi_logo.svg';
 
 export default function Signup() {
   const [name, setName] = useState('');
@@ -60,7 +60,7 @@ export default function Signup() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link to="/" className="inline-block">
-            <img src={logo} alt="FIBI Logo" className="mx-auto h-30 w-auto" />
+            <img src={logo} alt="FIBI Logo" className="mx-auto h-37 w-auto" />
           </Link>
           <p className="text-gray-500 mt-2 text-sm">Create your investor account</p>
         </div>
