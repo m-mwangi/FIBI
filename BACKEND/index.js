@@ -1,6 +1,13 @@
 const express = require('express');
+const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const config = require("./config/env")
 const { prisma, connectDB, disconnectDB } = require('./config/db');
+const errorHandler = require('./middleware/error.middleware');
+
+//Import routes
+const authRoutes = require('./routes/auth.routes');
+
 
 const app = express();
 
@@ -9,13 +16,22 @@ connectDB();
 
 const port = config.PORT
 
-// Middleware to parse JSON bodies
+//middleware parse to pass data to the server side
+app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // Basic route
 app.get('/', (req, res) => {
     res.send('Hello Backend Working!');
 });
+
+//Use routes
+app.use('/api/v1/auth', authRoutes);
+
+// Error Handler Middleware
+app.use(errorHandler);
 
 // Start the server
 app.listen(port, () => {
