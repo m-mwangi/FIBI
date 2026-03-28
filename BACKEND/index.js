@@ -1,7 +1,11 @@
 const express = require('express');
 const config = require("./config/env")
+const { prisma, connectDB, disconnectDB } = require('./config/db');
 
 const app = express();
+
+//connect to the database
+connectDB();
 
 const port = config.PORT
 
