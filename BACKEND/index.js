@@ -17,7 +17,12 @@ connectDB();
 const port = config.PORT
 
 //middleware parse to pass data to the server side
-app.use(cors());
+app.use(
+    cors({
+        origin: config.FRONTEND_URL || true,
+        credentials: true,
+    })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());

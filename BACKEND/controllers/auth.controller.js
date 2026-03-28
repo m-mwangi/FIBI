@@ -20,6 +20,42 @@ function jwtExpiresToMs(value) {
     return n * mult[u];
 }
 
+async function createRegisteredUser(body, role) {
+    const { name, email, password, dob, country, idType, idNumber } = body;
+    if (!email || !password || !name) {
+        return {
+            error: { status: 400, body: { success: false, error: "Name, email and password are required" } },
+        };
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+        return { error: { status: 400, body: { success: false, error: "User already exists" } } };
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    const parsedDob = dob ? new Date(dob) : null;
+
+    let mappedIdType = idType;
+    if (idType === "national-id") mappedIdType = "national_id";
+    if (idType === "drivers-license") mappedIdType = "drivers_license";
+
+    const user = await prisma.user.create({
+        data: {
+            name,
+            email,
+            password: hashedPassword,
+            dob: parsedDob,
+            country,
+            idType: mappedIdType,
+            idNumber,
+            role,
+        },
+    });
+    return { user };
+}
+
 const sendTokenResponse = (user, statusCode, res, message) => {
     if (!secret) {
         return res.status(500).json({
@@ -57,47 +93,37 @@ const sendTokenResponse = (user, statusCode, res, message) => {
 
 const registerUser = async (req, res, next) => {
     try {
-        const { name, email, password, dob, country, idType, idNumber} = req.body;
-        if (!email || !password || !name) {
-            return res.status(400).json({ 
-                success: false, 
-                error: 'Name, email and password are required' 
-            })
+        const result = await createRegisteredUser(req.body, "investor");
+        if (result.error) {
+            return res.status(result.error.status).json(result.error.body);
         }
-
-        // Check if user already exists
-        const existingUser = await prisma.user.findUnique({
-            where: { email },
-        });
-        if (existingUser) {
-            return res.status(400).json({ 
-                success: false, 
-                error: 'User already exists' 
-            });
-        }
-
-        // Hash password
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-        const parsedDob = dob ? new Date(dob) : null;
-
-        let mappedIdType = idType;
-        if (idType === 'national-id') mappedIdType = 'national_id';
-        if (idType === 'drivers-license') mappedIdType = 'drivers_license';
-
-
-
-        // Create user
-        const user = await prisma.user.create({
-            data: { name, email, password: hashedPassword, dob: parsedDob, country, idType: mappedIdType, idNumber, role: 'investor' },
-        });
-
-        // Send token response
-        sendTokenResponse(user, 201, res, 'User registered successfully');
+        sendTokenResponse(result.user, 201, res, "User registered successfully");
     } catch (error) {
         next(error);
     }
-}
+};
+
+const registerAdmin = async (req, res, next) => {
+    try {
+        const result = await createRegisteredUser(req.body, "admin");
+        if (result.error) {
+            return res.status(result.error.status).json(result.error.body);
+        }
+        const { user } = result;
+        res.status(201).json({
+            success: true,
+            message: "Admin user created successfully",
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 
 const loginUser = async (req, res, next) => {
     try {
@@ -144,6 +170,22 @@ const loginUser = async (req, res, next) => {
     }
 }
 
+const getMe = async (req, res, next) => {
+    try {
+        res.status(200).json({
+            success: true,
+            user: {
+                id: req.user.id,
+                name: req.user.name,
+                email: req.user.email,
+                role: req.user.role,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 const logoutUser = async (req, res, next) => {
     try {
         res.cookie('token', 'none', { 
@@ -159,4 +201,4 @@ const logoutUser = async (req, res, next) => {
     }
 }
 
-module.exports = { registerUser, loginUser, logoutUser };
+module.exports = { registerUser, registerAdmin, loginUser, logoutUser, getMe };
