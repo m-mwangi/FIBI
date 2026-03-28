@@ -9,10 +9,9 @@ export default function Home() {
   const { isAuthenticated } = useAuth();
 
   const images = [
-    "/images/hero9.jpeg",
-    "/images/hero10.jpeg",
-    "/images/hero11.jpeg",
-    "/images/hero12.jpeg",
+    "/images/capsule12.jpeg",
+    "/images/avo3.jpg",
+    "/images/solar2.jpg",
   ];
 
   const [currentImage, setCurrentImage] = useState(0);
@@ -20,7 +19,7 @@ export default function Home() {
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentImage((prev) => (prev + 1) % images.length);
-    }, 3000);
+    }, 6000);
     return () => clearInterval(interval);
   }, []);
 
@@ -28,51 +27,44 @@ export default function Home() {
     <div className="min-h-screen">
 
       {/* Hero Section */}
-      <section className="relative h-screen flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0">
-          {images.map((img, index) => (
-            <div
-              key={index}
-              className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ${
-                index === currentImage ? "opacity-100" : "opacity-0"
-              }`}
-              style={{ backgroundImage: `url(${img})` }}
-            />
-          ))}
-        </div>
-        <div className="absolute inset-0 bg-black/50"></div>
-        <div className="relative z-10 text-center max-w-4xl mx-auto px-4 text-white">
-          <h1 className="text-4xl md:text-5xl mb-6">
-            Invest Together. Profit Together.
-          </h1>
-          <p className="text-xl max-w-2xl mx-auto">
-            FIBI enables collective investment in vetted land projects. Earn passive income through sustainable developments like eco-lodges, solar farms, and agroforestry.
-          </p>
-        </div>
-      </section>
+<section className="relative h-screen flex items-center justify-center overflow-hidden">
+  <div className="absolute inset-0">
+    {images.map((img, index) => (
+      <div
+        key={index}
+        className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ${
+          index === currentImage ? "opacity-100" : "opacity-0"
+        }`}
+        style={{ backgroundImage: `url(${img})` }}
+      />
+    ))}
+  </div>
+
+  {/* Dark overlay */}
+  <div className="absolute inset-0 bg-black/50"></div>
+
+  {/* Hero Content */}
+  <div className="relative z-10 text-center max-w-4xl mx-auto px-4 text-white">
+    <h1 className="text-4xl md:text-5xl mb-6">
+      Invest Together. Profit Together.
+    </h1>
+
+    <p className="text-xl max-w-2xl mx-auto mb-8">
+      FIBI enables collective investment in vetted land projects. Earn passive income through sustainable developments like eco-lodges, solar farms, and agroforestry.
+    </p>
+
+    <Link to="/projects">
+      <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700">
+        Browse Projects
+      </Button>
+    </Link>
+  </div>
+</section>
 
             {/* Features */}
 <section className="bg-white">
 
-  {/* FULL WIDTH Image with overlay text */}
-<div className="relative w-full h-[350px]">
-  <img
-    src="/images/hero4.png"
-    alt="Kenya's World Garden"
-    className="w-full h-full object-cover"
-  />
-  
-  {/* Semi-transparent overlay */}
-  <div className="absolute inset-0 bg-black/40"></div>
-
-  {/* Centered text */}
-  <div className="absolute inset-0 flex items-center justify-center">
-    <h2 className="text-white text-3xl md:text-4xl font-bold text-center drop-shadow-lg px-4">
-      Kenya's World Garden
-    </h2>
-  </div>
-</div>
-
+ 
   {/* Content */}
   <div className="py-20 px-4">
     <div className="max-w-7xl mx-auto">

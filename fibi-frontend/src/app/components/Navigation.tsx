@@ -45,7 +45,7 @@ export function Navigation() {
             <img
               src={logo}
               alt="FIBI"
-              className={`h-38 w-auto transition-all ${
+              className={`h-40 w-auto transition-all ${
                 isHomePage
                   ? scrolled
                     ? 'invert-0'
@@ -64,7 +64,7 @@ export function Navigation() {
             <Link to="/">
               <Button
                 variant="ghost"
-                className={`transition-colors ${
+                className={`text-base transition-colors ${
                   isHomePage && !scrolled
                     ? 'text-white hover:bg-white/20'
                     : 'text-white hover:bg-white/20'
@@ -78,7 +78,7 @@ export function Navigation() {
             <Link to="/projects">
               <Button
                 variant="ghost"
-                className={`transition-colors ${
+                className={`text-base transition-colors ${
                   isHomePage && !scrolled
                     ? 'text-white hover:bg-white/20'
                     : 'text-white hover:bg-white/20'
@@ -93,7 +93,7 @@ export function Navigation() {
               <Link to="/dashboard">
                 <Button
                   variant="ghost"
-                  className={`transition-colors ${
+                  className={`text-base transition-colors ${
                     isHomePage && !scrolled
                       ? 'text-white hover:bg-white/20'
                       : 'text-white hover:bg-white/20'
@@ -121,7 +121,7 @@ export function Navigation() {
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="outline"
-                        className={`transition-colors ${
+                        className={`text-base transition-colors ${
                           isHomePage && !scrolled
                             ? 'border-white text-white'
                             : 'border-gray-300 text-gray-900'
@@ -163,7 +163,7 @@ export function Navigation() {
                   <Link to="/login">
                     <Button
                       variant="ghost"
-                      className={`transition-colors ${
+                      className={`text-base transition-colors ${
                         isHomePage && !scrolled
                           ? 'text-white hover:bg-white/20'
                           : 'text-white hover:bg-white/20'

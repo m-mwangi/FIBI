@@ -19,7 +19,7 @@ export default function Projects() {
   useEffect(() => {
   const interval = setInterval(() => {
     nextSlide(); // move to next slide automatically
-  }, 2000); // every 5 seconds
+  }, 4000); // every 4 seconds
 
   return () => clearInterval(interval); // cleanup on unmount
 }, [currentSlide]);
