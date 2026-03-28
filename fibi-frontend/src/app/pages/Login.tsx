@@ -20,30 +20,31 @@ export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as any)?.from?.pathname || '/dashboard';
+  const fromPath = (location.state as { from?: { pathname?: string } })?.from?.pathname;
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setError('');
-  setIsLoading(true);
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
 
-  try {
-    const success = await login(email, password, role);
-    if (success) {
-      if (role === 'admin') {
-        navigate('/admin', { replace: true }); // Admins go to /admin
+    try {
+      const result = await login(email, password, role);
+      if (result.success) {
+        const defaultPath = result.user.role === 'admin' ? '/admin' : '/dashboard';
+        const canUseFrom =
+          fromPath &&
+          ((result.user.role === 'admin' && fromPath.startsWith('/admin')) ||
+            (result.user.role === 'investor' && fromPath.startsWith('/dashboard')));
+        navigate(canUseFrom ? fromPath : defaultPath, { replace: true });
       } else {
-        navigate('/dashboard', { replace: true }); // Investors go to /dashboard
+        setError(result.error);
       }
-    } else {
-      setError('Invalid email or password. Please try again.');
+    } catch {
+      setError('An error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
-  } catch {
-    setError('An error occurred. Please try again.');
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 px-4 py-12">
@@ -97,7 +98,7 @@ export default function Login() {
                 <Label>Email Address</Label>
                 <Input
                   type="email"
-                  placeholder={role === 'admin' ? 'admin@demo.com' : 'you@example.com'}
+                  placeholder={role === 'admin' ? 'admin@example.com' : 'you@example.com'}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -109,7 +110,7 @@ export default function Login() {
                 <Label>Password</Label>
                 <Input
                   type="password"
-                  placeholder={role === 'admin' ? 'admin123' : '••••••••'}
+                  placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -137,8 +138,8 @@ export default function Login() {
                     </Link>
                   </>
                 ) : (
-                  <span className="text-gray-400">
-                    Demo Admin: admin@demo.com / admin123
+                  <span className="text-gray-500 text-xs">
+                    Use your admin account (same login as investors; role must match).
                   </span>
                 )}
               </div>

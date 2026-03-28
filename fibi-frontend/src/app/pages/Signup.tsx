@@ -41,11 +41,19 @@ export default function Signup() {
 
     setIsLoading(true);
     try {
-      const success = await signup(name, email, password);
-      if (success) {
+      const result = await signup({
+        name,
+        email,
+        password,
+        dob: dob || undefined,
+        country: country || undefined,
+        idType,
+        idNumber: idNumber || undefined,
+      });
+      if (result.success) {
         navigate('/dashboard', { replace: true });
       } else {
-        setError('An account with this email already exists');
+        setError(result.error);
       }
     } catch {
       setError('An error occurred. Please try again.');

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate } from 'react-router';
+import { Navigate, useNavigate } from 'react-router';
 import {
   Users,
   DollarSign,
@@ -45,13 +45,19 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend
-} from 'recharts';import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+} from 'recharts';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    void logout().then(() => navigate('/', { replace: true }));
+  };
   const [activeSection, setActiveSection] = useState('dashboard');
   const [platformSettings, setPlatformSettings] = useState({
   platformName: "FIBI",
@@ -88,12 +94,7 @@ const [adminProfile, setAdminProfile] = useState({
   email: "admin@fibi.com",
 });
 
-  if (!user) return null;
-  if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
-
   const [projects, setProjects] = useState(projectsData);
-
-  // Add Project modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newProject, setNewProject] = useState({
     title: '',
@@ -104,14 +105,13 @@ const [adminProfile, setAdminProfile] = useState({
     investors: 0,
     status: 'open',
   });
-
-  // Delete Project modal
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-
-  // Project Details modal (editable)
   const [selectedProject, setSelectedProject] = useState<typeof projectsData[0] | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+
+  if (!user) return null;
+  if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
 
   const totalUsers = 1247;
   const totalInvested = projects.reduce((sum, p) => sum + p.currentFunding, 0);
@@ -233,7 +233,8 @@ const [adminProfile, setAdminProfile] = useState({
               </button>
             ))}
             <button
-              onClick={logout}
+              type="button"
+              onClick={handleLogout}
               className="flex items-center gap-2 px-4 py-2 mt-4 rounded-md w-full text-left text-red-600 hover:bg-red-100 transition-colors"
             >
               <LogOut className="h-4 w-4" /> Log Out
