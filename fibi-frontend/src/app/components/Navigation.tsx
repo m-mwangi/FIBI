@@ -22,6 +22,7 @@ export function Navigation() {
   const handleLogout = () => {
     void logout().then(() => navigate('/', { replace: true }));
   };
+
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -45,7 +46,7 @@ export function Navigation() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
 
-          {/* Logo - ALWAYS visible on home even when scrolled */}
+          {/* Logo */}
           <Link to="/" className="flex items-center">
             <img
               src={logo}
@@ -61,17 +62,15 @@ export function Navigation() {
           </Link>
 
           {/* Middle Navigation Links */}
-          <div
-            className={`flex items-center gap-1 transition-opacity duration-300 ${
-              isHomePage && scrolled ? 'opacity-0 pointer-events-none' : ''
-            }`}
-          >
+          <div className="flex items-center gap-1 transition-opacity duration-300">
             <Link to="/">
               <Button
                 variant="ghost"
                 className={`text-base transition-colors ${
-                  isHomePage && !scrolled
-                    ? 'text-white hover:bg-white/20'
+                  isHomePage
+                    ? scrolled
+                      ? 'text-black hover:bg-black/10'
+                      : 'text-white hover:bg-white/20'
                     : 'text-white hover:bg-white/20'
                 }`}
               >
@@ -84,8 +83,10 @@ export function Navigation() {
               <Button
                 variant="ghost"
                 className={`text-base transition-colors ${
-                  isHomePage && !scrolled
-                    ? 'text-white hover:bg-white/20'
+                  isHomePage
+                    ? scrolled
+                      ? 'text-black hover:bg-black/10'
+                      : 'text-white hover:bg-white/20'
                     : 'text-white hover:bg-white/20'
                 }`}
               >
@@ -99,8 +100,10 @@ export function Navigation() {
                 <Button
                   variant="ghost"
                   className={`text-base transition-colors ${
-                    isHomePage && !scrolled
-                      ? 'text-white hover:bg-white/20'
+                    isHomePage
+                      ? scrolled
+                        ? 'text-black hover:bg-black/10'
+                        : 'text-white hover:bg-white/20'
                       : 'text-white hover:bg-white/20'
                   }`}
                 >
@@ -117,73 +120,57 @@ export function Navigation() {
             {!authReady ? (
               <div className="h-10 w-40" aria-hidden />
             ) : isAuthenticated ? (
-              <>
-                {/* Hide user dropdown on home when scrolled */}
-                <div
-                  className={`transition-opacity duration-300 ${
-                    isHomePage && scrolled ? 'opacity-0 pointer-events-none' : ''
-                  }`}
-                >
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={`text-base transition-colors ${
-                          isHomePage && !scrolled
-                            ? 'border-white text-white'
-                            : 'border-gray-300 text-gray-900'
-                        }`}
-                      >
-                        <User className="h-4 w-4 mr-2" />
-                        {user?.name}
-                      </Button>
-                    </DropdownMenuTrigger>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={`text-base transition-colors ${
+                      isHomePage
+                        ? scrolled
+                          ? 'border-gray-300 text-black'
+                          : 'border-white text-white'
+                        : 'border-gray-300 text-gray-900'
+                    }`}
+                  >
+                    <User className="h-4 w-4 mr-2" />
+                    {user?.name}
+                  </Button>
+                </DropdownMenuTrigger>
 
-                    <DropdownMenuContent
-                      align="end"
-                      className="w-56 z-[100] bg-white"
-                    >
-                      <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link to={user?.role === 'admin' ? '/admin' : '/dashboard'}>
-                          {user?.role === 'admin' ? 'Admin dashboard' : 'Dashboard'}
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={handleLogout}
-                        className="text-red-600"
-                      >
-                        Log Out
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </>
+                <DropdownMenuContent align="end" className="w-56 z-[100] bg-white">
+                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to={user?.role === 'admin' ? '/admin' : '/dashboard'}>
+                      {user?.role === 'admin' ? 'Admin dashboard' : 'Dashboard'}
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleLogout}
+                    className="text-red-600"
+                  >
+                    Log Out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : (
               <>
-                {/* Hide login on home when scrolled */}
-                <div
-                  className={`transition-opacity duration-300 ${
-                    isHomePage && scrolled ? 'opacity-0 pointer-events-none' : ''
-                  }`}
-                >
-                  <Link to="/login">
-                    <Button
-                      variant="ghost"
-                      className={`text-base transition-colors ${
-                        isHomePage && !scrolled
-                          ? 'text-white hover:bg-white/20'
-                          : 'text-white hover:bg-white/20'
-                      }`}
-                    >
-                      Log In
-                    </Button>
-                  </Link>
-                </div>
+                <Link to="/login">
+                 <Button
+  variant="ghost"
+  className={`text-base transition-colors ${
+    isHomePage
+      ? scrolled
+        ? 'text-black hover:bg-black/10'
+        : 'text-white hover:bg-white/20'
+      : 'text-gray-900 hover:bg-gray-100'
+  }`}
+>
+  Log In
+</Button>                </Link>
 
-                {/* Join Investment ALWAYS visible on home */}
+                {/* Join Investment ALWAYS visible */}
                 <Link to="/signup">
                   <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
                     Join Investment
