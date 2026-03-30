@@ -162,13 +162,14 @@ export function Navigation() {
   className={`text-base transition-colors ${
     isHomePage
       ? scrolled
-        ? 'text-black hover:bg-black/10'
-        : 'text-white hover:bg-white/20'
-      : 'text-gray-900 hover:bg-gray-100'
+        ? 'border-gray-300 text-black hover:bg-black/10'
+        : 'border-white text-white hover:bg-white/20'
+      : 'text-white hover:bg-white/20'  // <--- same as middle nav buttons
   }`}
 >
   Log In
-</Button>                </Link>
+</Button>
+                </Link>
 
                 {/* Join Investment ALWAYS visible */}
                 <Link to="/signup">
