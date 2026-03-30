@@ -1,0 +1,203 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+  
+}
+
+datasource db {
+  provider = "postgresql"
+} 
+
+//////////////////////////////////////////////////////
+// ENUMS (FIXED VALUE SETS)
+// These restrict fields to predefined values
+//////////////////////////////////////////////////////
+
+// User roles in the system
+enum UserRole {
+  investor
+  admin
+}
+
+// Identification types (mapped to DB-friendly strings)
+enum IdType {
+  passport
+  national_id   @map("national_id")  // map to national_id in the database
+  drivers_license   @map("drivers_license") // map to drivers_license in the database
+}
+
+// Project lifecycle states
+enum ProjectStatus {
+  open
+  funded
+  active
+  closed
+}
+
+// Timeline progress states
+enum TimelineStatus {
+  completed
+  in_progress      @map("in-progress")
+  upcoming
+}
+
+// Investment lifecycle
+enum InvestmentStatus {
+  pending
+  active
+  completed
+}
+
+// Transaction types
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  INVESTMENT
+  PAYOUT
+}
+
+// Transaction states
+enum TransactionStatus {
+  pending
+  completed
+  failed
+}
+
+//////////////////////////////////////////////////////
+// USER TABLE
+//////////////////////////////////////////////////////
+
+
+model User {
+  id        String    @id @default(uuid())
+  name      String
+  email     String    @unique
+  password  String
+  dob       DateTime?
+  country   String?
+  // ENUM USED HERE
+  idType    IdType?   // Restricted to enum values
+  idNumber  String?
+
+  role      UserRole    @default(investor) // Default role = investor
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  //Relationships
+  investments Investment[] //One to many relationship with Investment
+  transactions Transaction[] //One to many relationship with Transaction
+}
+
+//////////////////////////////////////////////////////
+// PROJECT TABLE
+//////////////////////////////////////////////////////
+
+model Project {
+  id              String   @id @default(uuid())
+  title           String
+  location        String
+  category        String
+  minInvestment   Float
+  totalFunding    Float
+  currentFunding  Float    @default(0)
+  investorsCount  Int      @default(0)
+  projectedROI    Float
+  payoutFrequency String
+  fundingDeadline DateTime
+  description     String
+  features        String[]
+  imageUrl        String
+  images          String[]
+  // ENUM USED HERE
+  status          ProjectStatus @default(open)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  //Relationships
+  timeline Timeline[] //One to many relationship with Timeline phases
+  investments Investment[] //One to many relationship with Investment
+}
+
+//////////////////////////////////////////////////////
+// TIMELINE TABLE
+//////////////////////////////////////////////////////
+
+model Timeline {
+  id        String   @id @default(uuid())
+  phase     String
+  // ENUM USED HERE
+  status    TimelineStatus
+  projectId String // fOREIGN KEY TO PROJECT TABLE ID
+
+  //Relationships
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade) //One to many relationship with Project
+}
+
+//////////////////////////////////////////////////////
+// INVESTMENT TABLE
+//////////////////////////////////////////////////////
+
+model Investment {
+  id             String   @id @default(uuid())
+  userId         String
+  projectId      String
+  amountInvested Float
+  currentValue   Float?
+  totalReturns   Float?   @default(0)
+  
+  // ENUM USED HERE
+  status         InvestmentStatus @default(active)
+  investmentDate DateTime @default(now())
+
+  //Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  
+}
+
+//////////////////////////////////////////////////////
+// TRANSACTION TABLE
+//////////////////////////////////////////////////////
+
+model Transaction {
+  id        String   @id @default(uuid())
+  userId    String // FOREIGN KEY TO USER TABLE ID
+  amount    Float
+  // ENUMS USED HERE
+  type      TransactionType   // deposit, withdrawal, etc.
+  status    TransactionStatus @default(pending) //pending, completed, failed
+  createdAt DateTime @default(now())
+
+  //Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade) //One to many relationship with User
+}
+
+
+//////////////////////////////////////////////////////
+// SETTINGS TABLE (GLOBAL CONFIG)
+//////////////////////////////////////////////////////
+
+model Settings {
+  id                   String   @id @default("global")
+  platformName         String   @default("FIBI")
+  supportEmail         String   @default("support@fibi.com")
+  contactPhone         String   @default("+254 700 000 000")
+  minInvestment        Float    @default(100)
+  maxInvestment        Float    @default(50000)
+  platformFee          Float    @default(2)
+  currency             String   @default("USD")
+  depositsEnabled      Boolean  @default(true)
+  withdrawalsEnabled   Boolean  @default(true)
+  transactionFee       Float    @default(1.5)
+  emailNotifications   Boolean  @default(true)
+  investmentEmails     Boolean  @default(true)
+  adminAlerts          Boolean  @default(true)
+  twoFactorAuth        Boolean  @default(false)
+  sessionTimeout       Int      @default(30)
+  updatedAt            DateTime @updatedAt
+}

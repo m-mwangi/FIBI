@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { LayoutDashboard, FolderOpen, Home, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from './ui/button';
@@ -15,8 +15,13 @@ import logo from "../../assets/fibi_logo.svg";
 
 export function Navigation() {
   const location = useLocation();
+  const navigate = useNavigate();
   const isHomePage = location.pathname === '/';
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated, authReady } = useAuth();
+
+  const handleLogout = () => {
+    void logout().then(() => navigate('/', { replace: true }));
+  };
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -89,8 +94,8 @@ export function Navigation() {
               </Button>
             </Link>
 
-            {isAuthenticated && (
-              <Link to="/dashboard">
+            {authReady && isAuthenticated && user && (
+              <Link to={user.role === 'admin' ? '/admin' : '/dashboard'}>
                 <Button
                   variant="ghost"
                   className={`text-base transition-colors ${
@@ -100,7 +105,7 @@ export function Navigation() {
                   }`}
                 >
                   <LayoutDashboard className="h-4 w-4 mr-2" />
-                  Dashboard
+                  {user.role === 'admin' ? 'Admin' : 'Dashboard'}
                 </Button>
               </Link>
             )}
@@ -109,7 +114,9 @@ export function Navigation() {
           {/* Right Side Auth Section */}
           <div className="flex items-center gap-2">
 
-            {isAuthenticated ? (
+            {!authReady ? (
+              <div className="h-10 w-40" aria-hidden />
+            ) : isAuthenticated ? (
               <>
                 {/* Hide user dropdown on home when scrolled */}
                 <div
@@ -139,11 +146,13 @@ export function Navigation() {
                       <DropdownMenuLabel>My Account</DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
-                        <Link to="/dashboard">Dashboard</Link>
+                        <Link to={user?.role === 'admin' ? '/admin' : '/dashboard'}>
+                          {user?.role === 'admin' ? 'Admin dashboard' : 'Dashboard'}
+                        </Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onClick={logout}
+                        onClick={handleLogout}
                         className="text-red-600"
                       >
                         Log Out

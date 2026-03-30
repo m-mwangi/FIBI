@@ -1,0 +1,88 @@
+const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
+
+export const AUTH_PREFIX = "/api/v1/auth";
+
+export function getApiBase(): string {
+  return API_BASE;
+}
+
+export type AuthUserPayload = {
+  id: string;
+  name: string;
+  email: string;
+  role: "investor" | "admin";
+};
+
+export type AuthSuccessResponse = {
+  success: boolean;
+  token: string;
+  message?: string;
+  user: AuthUserPayload;
+};
+
+export type MeResponse = {
+  success: boolean;
+  user: AuthUserPayload;
+};
+
+function readErrorMessage(data: Record<string, unknown>): string {
+  if (typeof data.error === "string") return data.error;
+  if (typeof data.message === "string") return data.message;
+  return "Request failed";
+}
+
+export async function postJson<T>(
+  path: string,
+  body: unknown,
+  init?: { token?: string | null }
+): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  const token =
+    init?.token === undefined ? localStorage.getItem("fibi_token") : init.token;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    credentials: "include",
+  });
+
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (!res.ok) {
+    return { ok: false, status: res.status, error: readErrorMessage(data) };
+  }
+
+  return { ok: true, data: data as T };
+}
+
+export async function getJson<T>(
+  path: string,
+  init?: { token?: string | null }
+): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+  const headers: Record<string, string> = {};
+  const token =
+    init?.token === undefined ? localStorage.getItem("fibi_token") : init.token;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "GET",
+    headers,
+    credentials: "include",
+  });
+
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (!res.ok) {
+    return { ok: false, status: res.status, error: readErrorMessage(data) };
+  }
+
+  return { ok: true, data: data as T };
+}
