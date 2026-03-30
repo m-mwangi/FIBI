@@ -7,6 +7,7 @@ const errorHandler = require('./middleware/error.middleware');
 
 //Import routes
 const authRoutes = require('./routes/auth.routes');
+const oauthRoutes = require('./routes/oauth.routes');
 
 
 const app = express();
@@ -34,6 +35,7 @@ app.get('/', (req, res) => {
 
 //Use routes
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/oauth', oauthRoutes);
 
 // Error Handler Middleware
 app.use(errorHandler);
