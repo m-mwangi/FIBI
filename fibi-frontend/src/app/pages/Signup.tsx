@@ -72,7 +72,7 @@ export default function Signup() {
       <div className="relative mx-auto w-full max-w-2xl">
         <div className="mb-8 text-center">
           <Link to="/" className="inline-block">
-            <img src={logo} alt="FIBI" className="mx-auto h-10 sm:h-11 w-auto" />
+            <img src={logo} alt="FIBI" className="mx-auto h-50 sm:h-51 w-auto" />
           </Link>
           <p className="mt-3 flex items-center justify-center gap-2 text-sm text-slate-600">
             <Leaf className="h-4 w-4 text-emerald-600" />
