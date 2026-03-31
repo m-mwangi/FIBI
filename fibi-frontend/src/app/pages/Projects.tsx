@@ -63,7 +63,7 @@ export default function Projects() {
             fade ? 'opacity-0' : 'opacity-100'
           }`}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/45 to-emerald-900/25" />
+        <div className="absolute inset-0 bg-black/40" />
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center px-4 text-center">
           <p className="text-emerald-200/90 text-xs font-semibold uppercase tracking-[0.2em] mb-2">
             Investor marketplace
