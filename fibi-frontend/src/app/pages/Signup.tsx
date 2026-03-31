@@ -6,8 +6,10 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
 import { Alert, AlertDescription } from '../components/ui/alert';
+import { Separator } from '../components/ui/separator';
 import { AlertCircle, Leaf } from 'lucide-react';
 import logo from '../../assets/fibi_logo.svg';
+import { startOAuth, type OAuthProvider } from '@/lib/socialOAuth';
 
 export default function Signup() {
   const [name, setName] = useState('');
@@ -21,7 +23,7 @@ export default function Signup() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const { signup } = useAuth();
+  const { signup, oauthLogin } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,6 +57,24 @@ export default function Signup() {
       }
     } catch {
       setError('An error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleOAuthSignup = async (provider: OAuthProvider) => {
+    setError('');
+    setIsLoading(true);
+    try {
+      const payload = await startOAuth(provider);
+      const result = await oauthLogin(provider, payload);
+      if (result.success) {
+        navigate('/dashboard', { replace: true });
+      } else {
+        setError(result.error);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'OAuth signup failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -224,6 +244,25 @@ export default function Signup() {
               >
                 {isLoading ? 'Creating account…' : 'Create account'}
               </Button>
+
+              <div className="relative py-1">
+                <Separator />
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-xs text-slate-500">
+                  or sign up with
+                </span>
+              </div>
+
+              <div className="grid gap-2">
+                <Button type="button" variant="outline" className="h-10 rounded-xl" disabled={isLoading} onClick={() => handleOAuthSignup('google')}>
+                  Continue with Google
+                </Button>
+                <Button type="button" variant="outline" className="h-10 rounded-xl" disabled={isLoading} onClick={() => handleOAuthSignup('facebook')}>
+                  Continue with Facebook
+                </Button>
+                <Button type="button" variant="outline" className="h-10 rounded-xl" disabled={isLoading} onClick={() => handleOAuthSignup('apple')}>
+                  Continue with Apple
+                </Button>
+              </div>
 
               <p className="text-center text-sm text-slate-600">
                 Already registered?{' '}

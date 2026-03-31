@@ -29,12 +29,21 @@ export type SignupPayload = {
   idNumber?: string;
 };
 
+export type OAuthProvider = "google" | "facebook" | "apple";
+
+export type OAuthPayload = {
+  idToken?: string;
+  accessToken?: string;
+  name?: string;
+};
+
 interface AuthContextType {
   user: User | null;
   /** false until initial session check finishes (avoids protected-route flash) */
   authReady: boolean;
   login: (email: string, password: string, role: "investor" | "admin") => Promise<AuthResult>;
   signup: (payload: SignupPayload) => Promise<AuthResult>;
+  oauthLogin: (provider: OAuthProvider, payload: OAuthPayload) => Promise<AuthResult>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
 }
@@ -145,6 +154,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: true, user: normalized };
   };
 
+  const oauthLogin = async (provider: OAuthProvider, payload: OAuthPayload): Promise<AuthResult> => {
+    const res = await postJson<AuthSuccessResponse>(`/api/v1/oauth/${provider}`, payload, {
+      token: null,
+    });
+
+    if (!res.ok) {
+      return { success: false, error: res.error };
+    }
+
+    const { token, user: u } = res.data;
+    if (!token || !u) {
+      return { success: false, error: "Invalid response from server" };
+    }
+
+    const normalized = persistSession(u, token);
+    setUser(normalized);
+    return { success: true, user: normalized };
+  };
+
   const logout = async () => {
     const token = localStorage.getItem(STORAGE_TOKEN);
     try {
@@ -164,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         authReady,
         login,
         signup,
+        oauthLogin,
         logout,
         isAuthenticated: !!user,
       }}
