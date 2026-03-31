@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
   TrendingUp,
@@ -20,7 +20,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { mockUserInvestments, projects, type Project } from '../data/projects';
+import { projects, type Project } from '../data/projects';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -54,6 +54,34 @@ import {
   Cell,
 } from 'recharts';
 import logo from '../../assets/fibi_logo.svg';
+import { getJson } from '@/lib/api';
+
+type ApiInvestment = {
+  id: string;
+  projectId: string;
+  amountInvested: number;
+  currentValue: number | null;
+  totalReturns: number | null;
+  status: 'pending' | 'active' | 'completed';
+  investmentDate: string;
+  project: {
+    id: string;
+    title: string;
+    location: string;
+    category: string;
+    totalFunding: number;
+    currentFunding: number;
+    projectedROI: number;
+    payoutFrequency: string;
+    status: 'open' | 'funded' | 'active' | 'closed';
+    fundingDeadline: string;
+    imageUrl: string;
+  };
+};
+
+type InvestmentsResponse = {
+  investments: ApiInvestment[];
+};
 
 const PIE_COLORS = ['#059669', '#0d9488', '#6366f1', '#d97706', '#64748b'];
 
@@ -70,15 +98,54 @@ export default function UserDashboard() {
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [investments, setInvestments] = useState<ApiInvestment[]>([]);
+  const [isLoadingInvestments, setIsLoadingInvestments] = useState(true);
+  const [investmentsError, setInvestmentsError] = useState('');
 
   const handleLogout = () => {
     void logout().then(() => navigate('/', { replace: true }));
   };
 
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setIsLoadingInvestments(true);
+      setInvestmentsError('');
+
+      const result = await getJson<InvestmentsResponse>('/api/v1/investments');
+      if (cancelled) return;
+
+      if (!result.ok) {
+        setInvestmentsError(result.error || 'Failed to load investments.');
+        setInvestments([]);
+      } else {
+        setInvestments(result.data.investments ?? []);
+      }
+
+      setIsLoadingInvestments(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const userInvestments = useMemo(
+    () =>
+      investments.map((inv) => ({
+        ...inv,
+        currentValue: inv.currentValue ?? inv.amountInvested,
+        totalReturns: inv.totalReturns ?? 0,
+        projectTitle: inv.project?.title ?? 'Project',
+      })),
+    [investments]
+  );
+
   const totals = useMemo(() => {
-    const totalInvested = mockUserInvestments.reduce((sum, inv) => sum + inv.amountInvested, 0);
-    const totalCurrentValue = mockUserInvestments.reduce((sum, inv) => sum + inv.currentValue, 0);
-    const totalReturns = mockUserInvestments.reduce((sum, inv) => sum + inv.totalReturns, 0);
+    const totalInvested = userInvestments.reduce((sum, inv) => sum + inv.amountInvested, 0);
+    const totalCurrentValue = userInvestments.reduce((sum, inv) => sum + inv.currentValue, 0);
+    const totalReturns = userInvestments.reduce((sum, inv) => sum + inv.totalReturns, 0);
     const totalGain = totalCurrentValue - totalInvested;
     const totalGainPercentage =
       totalInvested > 0 ? ((totalGain / totalInvested) * 100).toFixed(2) : '0.00';
@@ -89,7 +156,7 @@ export default function UserDashboard() {
       totalGain,
       totalGainPercentage,
     };
-  }, []);
+  }, [userInvestments]);
 
   const { totalInvested, totalCurrentValue, totalReturns, totalGain, totalGainPercentage } = totals;
 
@@ -125,20 +192,19 @@ export default function UserDashboard() {
 
   const allocationData = useMemo(() => {
     const byCat: Record<string, number> = {};
-    mockUserInvestments.forEach((inv) => {
-      const p = projects.find((x) => x.id === inv.projectId);
-      const key = p?.category ?? 'other';
+    userInvestments.forEach((inv) => {
+      const key = inv.project?.category ?? 'other';
       byCat[key] = (byCat[key] ?? 0) + inv.amountInvested;
     });
     return Object.entries(byCat).map(([name, value]) => ({
       name: formatCategory(name),
       value,
     }));
-  }, []);
+  }, [userInvestments]);
 
   const investedIds = useMemo(
-    () => new Set(mockUserInvestments.map((i) => i.projectId)),
-    []
+    () => new Set(userInvestments.map((i) => i.projectId)),
+    [userInvestments]
   );
 
   const suggestedProjects = useMemo(() => {
@@ -171,14 +237,14 @@ export default function UserDashboard() {
     []
   );
 
-  const hasInvestments = mockUserInvestments.length > 0;
+  const hasInvestments = userInvestments.length > 0;
 
   const statCards = [
     {
       title: 'Total invested',
       value: formatCurrency(totalInvested),
       hint: hasInvestments
-        ? `Across ${mockUserInvestments.length} project${mockUserInvestments.length === 1 ? '' : 's'}`
+        ? `Across ${userInvestments.length} project${userInvestments.length === 1 ? '' : 's'}`
         : 'Start by browsing open projects',
       icon: DollarSign,
       accent: 'text-emerald-600',
@@ -205,8 +271,8 @@ export default function UserDashboard() {
     },
     {
       title: 'Active projects',
-      value: String(mockUserInvestments.length),
-      hint: `${mockUserInvestments.filter((inv) => inv.status === 'active').length} generating returns`,
+      value: String(userInvestments.length),
+      hint: `${userInvestments.filter((inv) => inv.status === 'active').length} generating returns`,
       icon: Briefcase,
       accent: 'text-slate-700',
       iconBg: 'bg-slate-100',
@@ -399,7 +465,25 @@ export default function UserDashboard() {
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 pb-16">
-          {!hasInvestments ? (
+          {isLoadingInvestments ? (
+            <Card className="border-0 shadow-lg rounded-2xl ring-1 ring-slate-100 max-w-lg mx-auto text-center p-10 sm:p-12">
+              <h2 className="text-xl font-semibold text-slate-900">Loading investments...</h2>
+              <p className="text-slate-600 mt-2 text-sm leading-relaxed">
+                Fetching your live portfolio from the backend.
+              </p>
+            </Card>
+          ) : investmentsError ? (
+            <Card className="border-0 shadow-lg rounded-2xl ring-1 ring-slate-100 max-w-lg mx-auto text-center p-10 sm:p-12">
+              <h2 className="text-xl font-semibold text-slate-900">Unable to load investments</h2>
+              <p className="text-red-600 mt-2 text-sm leading-relaxed">{investmentsError}</p>
+              <Button
+                className="mt-8 h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </Button>
+            </Card>
+          ) : !hasInvestments ? (
             <Card className="border-0 shadow-lg rounded-2xl ring-1 ring-slate-100 max-w-lg mx-auto text-center p-10 sm:p-12">
               <div className="mx-auto w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mb-6">
                 <Briefcase className="h-7 w-7 text-emerald-700" />
@@ -743,8 +827,8 @@ export default function UserDashboard() {
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6">
                     <div className="space-y-5">
-                      {mockUserInvestments.map((investment) => {
-                        const project = projects.find((pr) => pr.id === investment.projectId);
+                      {userInvestments.map((investment) => {
+                        const project = investment.project;
                         const gain = investment.currentValue - investment.amountInvested;
                         const gainPercentage =
                           investment.amountInvested > 0
@@ -759,7 +843,7 @@ export default function UserDashboard() {
 
                         return (
                           <article
-                            key={investment.projectId}
+                            key={investment.id}
                             className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm hover:shadow-md hover:border-emerald-100/80 transition-all duration-200"
                           >
                             <div className="flex flex-col sm:flex-row">
@@ -776,9 +860,7 @@ export default function UserDashboard() {
                                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                                   <div className="flex-1 min-w-0">
                                     <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                                      <h3 className="text-base sm:text-lg font-semibold text-slate-900">
-                                        {investment.projectTitle}
-                                      </h3>
+                                      <h3 className="text-base sm:text-lg font-semibold text-slate-900">{investment.projectTitle}</h3>
                                       <Badge
                                         className={
                                           investment.status === 'active'

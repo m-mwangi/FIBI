@@ -23,6 +23,13 @@ enum UserRole {
   admin
 }
 
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  FACEBOOK
+  APPLE
+}
+
 // Identification types (mapped to DB-friendly strings)
 enum IdType {
   passport
@@ -82,6 +89,8 @@ model User {
   // ENUM USED HERE
   idType    IdType?   // Restricted to enum values
   idNumber  String?
+  authProvider AuthProvider @default(LOCAL)
+  providerId   String?
 
   role      UserRole    @default(investor) // Default role = investor
   createdAt DateTime  @default(now())

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router';
+import { useParams, Link, useNavigate } from 'react-router';
 import {
   ArrowLeft,
   MapPin,
@@ -20,12 +20,19 @@ import { Progress } from '../components/ui/progress';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Separator } from '../components/ui/separator';
+import { postJson } from '@/lib/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function ProjectDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const project = projects.find((p) => p.id === id);
   const [investmentAmount, setInvestmentAmount] = useState('');
   const [currentImage, setCurrentImage] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [submitSuccess, setSubmitSuccess] = useState('');
   const images = project?.images || (project ? [project.imageUrl] : []);
 
   if (!project) {
@@ -82,6 +89,42 @@ export default function ProjectDetail() {
       : project.status === 'funded'
         ? 'bg-sky-600 text-white border-0'
         : 'bg-violet-600 text-white border-0';
+
+  const handleInvest = async () => {
+    setSubmitError('');
+    setSubmitSuccess('');
+
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    const amount = Number(investmentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setSubmitError('Enter a valid investment amount.');
+      return;
+    }
+
+    if (amount < project.minInvestment) {
+      setSubmitError(`Minimum investment is ${formatCurrency(project.minInvestment)}.`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    const result = await postJson<{ message: string }>('/api/v1/investments', {
+      projectId: project.id,
+      amountInvested: amount,
+    });
+    setIsSubmitting(false);
+
+    if (!result.ok) {
+      setSubmitError(result.error || 'Unable to complete investment.');
+      return;
+    }
+
+    setSubmitSuccess(result.data.message || 'Investment created successfully.');
+    setInvestmentAmount('');
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-emerald-50/25">
@@ -300,14 +343,20 @@ export default function ProjectDetail() {
                   )}
 
                   {project.status === 'open' ? (
-                    <Button className="h-12 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-base">
-                      Invest now
+                    <Button
+                      className="h-12 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-base"
+                      onClick={() => void handleInvest()}
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? 'Processing...' : 'Invest now'}
                     </Button>
                   ) : (
                     <Button className="h-12 w-full rounded-xl" size="lg" disabled variant="secondary">
                       {project.status === 'funded' ? 'Fully funded' : 'Unavailable'}
                     </Button>
                   )}
+                  {submitError && <p className="text-center text-xs text-red-600">{submitError}</p>}
+                  {submitSuccess && <p className="text-center text-xs text-emerald-700">{submitSuccess}</p>}
                   <p className="text-center text-[11px] text-slate-400">Subject to terms and eligibility.</p>
                 </div>
               </CardContent>
