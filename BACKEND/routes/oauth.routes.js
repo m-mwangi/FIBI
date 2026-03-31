@@ -1,5 +1,5 @@
 const express = require('express');
-const { googleAuth, facebookAuth, appleAuth } = require('../controllers/oauth.controller');
+const { googleAuth,facebookAuth,appleAuth } = require('../controllers/oauth.controller');
 const oauthRouter = express.Router();
 
 // Google OAuth

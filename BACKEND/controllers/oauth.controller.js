@@ -1,6 +1,7 @@
 const { prisma } = require('../config/db');
 const jwt = require('jsonwebtoken');
 const config = require('../config/env');
+const bcrypt = require('bcryptjs');
 const { OAuth2Client } = require('google-auth-library');
 const axios = require('axios');
 const appleSigninAuth = require('apple-signin-auth');
@@ -29,44 +30,37 @@ const sendTokenResponse = (user, statusCode, res, message) => {
     });
 };
 
+const createOAuthPassword = async (provider, providerId) => {
+    const seed = `${provider}:${providerId}:${Date.now()}`;
+    return bcrypt.hash(seed, 10);
+};
 
-const handleOAuthLogin = async (provider, providerId, name, res, next) => {
+const getFallbackEmail = (provider, providerId) => {
+    const safeProvider = String(provider || 'oauth').toLowerCase();
+    return `${providerId}@${safeProvider}.oauth.local`;
+};
+
+const handleOAuthLogin = async (provider, providerId, email, name, res, next) => {
     try{
         if (!email) {
-            return res.status(400).json({
-                success: false,
-                error: 'Email is required from OAuth provider'
-            });
-        };
+            email = getFallbackEmail(provider, providerId);
+        }
 
-        // Check if user already exists
-        let user = await prisma.user.findFirst({
-            where: {
-                OR: [
-                    { email },
-                    { authProvider: provider, providerId }
-                ]
-            }
+        // Schema does not currently store provider metadata; email is the stable identity key.
+        let user = await prisma.user.findUnique({
+            where: { email }
         });
 
         if (user) {
-            // Update auth provider if they previously registered via another method
-            if (user.authProvider !== provider || user.providerId !== providerId) {
-                user = await prisma.user.update({
-                    where: { id: user.id },
-                    data: { authProvider: provider, providerId }
-                });
-            }
             return sendTokenResponse(user, 200, res, `Logged in with ${provider} successfully`);
         }
 
         // Create new user
         user = await prisma.user.create({
             data: {
-                name,
+                name: name || `${provider} User`,
                 email,
-                authProvider: provider,
-                providerId,
+                password: await createOAuthPassword(provider, providerId),
                 role: 'investor'
             }
         });
@@ -81,16 +75,26 @@ const handleOAuthLogin = async (provider, providerId, name, res, next) => {
 
 const googleAuth = async (req, res, next) => {
     try {
-        const { idToken } = req.body;
-        if (!idToken) return res.status(400).json({ success: false, error: 'Google ID token required.' });
+        const { idToken, accessToken } = req.body;
+        if (!idToken && !accessToken) {
+            return res.status(400).json({ success: false, error: 'Google token required.' });
+        }
 
-        const ticket = await googleClient.verifyIdToken({
-            idToken,
-            audience: config.GOOGLE_CLIENT_ID,
+        if (idToken) {
+            const ticket = await googleClient.verifyIdToken({
+                idToken,
+                audience: config.GOOGLE_CLIENT_ID,
+            });
+            const payload = ticket.getPayload();
+            return await handleOAuthLogin('GOOGLE', payload.sub, payload.email, payload.name, res, next);
+        }
+
+        const { data } = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+            },
         });
-        
-        const payload = ticket.getPayload();
-        await handleOAuthLogin('GOOGLE', payload.sub, payload.email, payload.name, res, next);
+        await handleOAuthLogin('GOOGLE', data.sub, data.email, data.name, res, next);
     } catch (error) {
         res.status(401).json({ success: false, error: 'Invalid Google Token' });
     }
@@ -121,7 +125,7 @@ const appleAuth = async (req, res, next) => {
             ignoreExpiration: true, // You may want to set this to false in production
         });
         
-        const email = appleIdTokenClaims.email;
+        const email = appleIdTokenClaims.email || null;
         const providerId = appleIdTokenClaims.sub;
         
         await handleOAuthLogin('APPLE', providerId, email, name || 'Apple User', res, next);
