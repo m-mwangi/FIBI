@@ -41,6 +41,8 @@ interface AuthContextType {
   user: User | null;
   /** false until initial session check finishes (avoids protected-route flash) */
   authReady: boolean;
+  /** Re-fetch `/auth/me` and update context (e.g. after profile name change). */
+  refreshUser: () => Promise<void>;
   login: (email: string, password: string, role: "investor" | "admin") => Promise<AuthResult>;
   signup: (payload: SignupPayload) => Promise<AuthResult>;
   oauthLogin: (provider: OAuthProvider, payload: OAuthPayload) => Promise<AuthResult>;
@@ -185,11 +187,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(STORAGE_TOKEN);
   };
 
+  const refreshUser = async () => {
+    const token = localStorage.getItem(STORAGE_TOKEN);
+    if (!token) return;
+    const me = await getJson<MeResponse>(`${AUTH_PREFIX}/me`, { token });
+    if (!me.ok) return;
+    const u = me.data.user;
+    const normalized: User = {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+    };
+    setUser(normalized);
+    localStorage.setItem(STORAGE_USER, JSON.stringify(normalized));
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
         authReady,
+        refreshUser,
         login,
         signup,
         oauthLogin,

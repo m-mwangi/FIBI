@@ -11,6 +11,7 @@ const authRoutes = require('./routes/auth.routes');
 const oauthRoutes = require('./routes/oauth.routes');
 const investmentRoutes = require('./routes/investment.routes');
 const projectRoutes = require("./routes/project.route");
+const userRoutes = require('./routes/user.routes');
 
 
 const app = express();
@@ -42,6 +43,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/oauth', oauthRoutes);
 app.use('/api/v1/investments', investmentRoutes);
 app.use("/api/v1/projects", projectRoutes);
+app.use('/api/v1/users', userRoutes);
 
 // Error Handler Middleware
 app.use(errorHandler);

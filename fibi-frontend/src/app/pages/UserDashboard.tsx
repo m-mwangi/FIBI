@@ -54,8 +54,17 @@ import {
   Cell,
 } from 'recharts';
 import logo from '../../assets/fibi_logo.svg';
-import { getJson } from '@/lib/api';
+import { getJson, putJson } from '@/lib/api';
 import { normalizeApiProject, resolveMediaUrl, type ProjectListResponse } from '@/lib/projects';
+import {
+  USERS_PREFIX,
+  apiIdTypeToFormValue,
+  formValueToApiIdType,
+  type ProfileResponse,
+  type ProfileUpdateResponse,
+} from '@/lib/users';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 
 type ApiInvestment = {
   id: string;
@@ -94,10 +103,26 @@ function formatCategory(slug: string) {
 }
 
 export default function UserDashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsProfileLoading, setSettingsProfileLoading] = useState(false);
+  const [settingsProfileError, setSettingsProfileError] = useState('');
+  const [settingsEmail, setSettingsEmail] = useState('');
+  const [formName, setFormName] = useState('');
+  const [formCountry, setFormCountry] = useState('');
+  const [formDob, setFormDob] = useState('');
+  const [formIdType, setFormIdType] = useState('');
+  const [formIdNumber, setFormIdNumber] = useState('');
+  const [settingsSaveBusy, setSettingsSaveBusy] = useState(false);
+  const [settingsSaveMsg, setSettingsSaveMsg] = useState('');
+  const [pwCurrent, setPwCurrent] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwError, setPwError] = useState('');
+  const [pwSuccess, setPwSuccess] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [investments, setInvestments] = useState<ApiInvestment[]>([]);
   const [isLoadingInvestments, setIsLoadingInvestments] = useState(true);
@@ -146,6 +171,89 @@ export default function UserDashboard() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    let cancelled = false;
+    setSettingsProfileError('');
+    setSettingsSaveMsg('');
+    setPwError('');
+    setPwSuccess('');
+    (async () => {
+      setSettingsProfileLoading(true);
+      const res = await getJson<ProfileResponse>(`${USERS_PREFIX}/profile`);
+      if (cancelled) return;
+      setSettingsProfileLoading(false);
+      if (!res.ok) {
+        setSettingsProfileError(res.error || 'Could not load profile.');
+        setSettingsEmail(user?.email ?? '');
+        setFormName(user?.name ?? '');
+        setFormCountry('');
+        setFormDob('');
+        setFormIdType('passport');
+        setFormIdNumber('');
+        return;
+      }
+      const p = res.data.data;
+      setSettingsEmail(p.email);
+      setFormName(p.name);
+      setFormCountry(p.country ?? '');
+      setFormDob(p.dob ? p.dob.slice(0, 10) : '');
+      setFormIdType(apiIdTypeToFormValue(p.idType) || 'passport');
+      setFormIdNumber(p.idNumber ?? '');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsOpen, user?.email, user?.name]);
+
+  const handleSaveProfile = async () => {
+    setSettingsSaveMsg('');
+    setSettingsProfileError('');
+    setSettingsSaveBusy(true);
+    const body = {
+      name: formName.trim(),
+      country: formCountry.trim() === '' ? null : formCountry.trim(),
+      dob: formDob.trim() === '' ? null : formDob,
+      idType: formValueToApiIdType(formIdType),
+      idNumber: formIdNumber.trim() === '' ? null : formIdNumber.trim(),
+    };
+    const res = await putJson<ProfileUpdateResponse>(`${USERS_PREFIX}/profile`, body);
+    setSettingsSaveBusy(false);
+    if (!res.ok) {
+      setSettingsProfileError(res.error);
+      return;
+    }
+    setSettingsSaveMsg('Profile saved.');
+    void refreshUser();
+  };
+
+  const handleChangePassword = async () => {
+    setPwError('');
+    setPwSuccess('');
+    if (pwNew !== pwConfirm) {
+      setPwError('New passwords do not match.');
+      return;
+    }
+    if (pwNew.length < 6) {
+      setPwError('New password must be at least 6 characters.');
+      return;
+    }
+    setPwBusy(true);
+    const res = await putJson<{ success: boolean; message?: string }>(`${USERS_PREFIX}/change-password`, {
+      currentPassword: pwCurrent,
+      newPassword: pwNew,
+    });
+    setPwBusy(false);
+    if (!res.ok) {
+      setPwError(res.error);
+      return;
+    }
+    setPwSuccess(res.data.message || 'Password updated.');
+    setPwCurrent('');
+    setPwNew('');
+    setPwConfirm('');
+  };
 
   const userInvestments = useMemo(
     () =>
@@ -344,15 +452,160 @@ export default function UserDashboard() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="sm:max-w-md rounded-2xl">
+      <Dialog
+        open={settingsOpen}
+        onOpenChange={(open) => {
+          setSettingsOpen(open);
+          if (!open) {
+            setSettingsSaveMsg('');
+            setSettingsProfileError('');
+            setPwError('');
+            setPwSuccess('');
+            setPwCurrent('');
+            setPwNew('');
+            setPwConfirm('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle>Account settings</DialogTitle>
             <DialogDescription>
-              Profile and security settings will be connected here soon. Your session and role are
-              managed securely through FIBI login.
+              Update your profile and password. Your email is tied to your login and cannot be changed here.
             </DialogDescription>
           </DialogHeader>
+          {settingsProfileLoading ? (
+            <p className="text-sm text-slate-500 py-6">Loading profile…</p>
+          ) : (
+            <div className="space-y-4">
+              {settingsProfileError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                  {settingsProfileError}
+                </p>
+              )}
+              {settingsSaveMsg && (
+                <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                  {settingsSaveMsg}
+                </p>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="set-name">Full name</Label>
+                <Input
+                  id="set-name"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  className="rounded-xl border-slate-200"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="set-email">Email</Label>
+                <Input id="set-email" value={settingsEmail} disabled className="rounded-xl border-slate-200 bg-slate-50" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="set-country">Country</Label>
+                <Input
+                  id="set-country"
+                  value={formCountry}
+                  onChange={(e) => setFormCountry(e.target.value)}
+                  className="rounded-xl border-slate-200"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="set-dob">Date of birth</Label>
+                <Input
+                  id="set-dob"
+                  type="date"
+                  value={formDob}
+                  onChange={(e) => setFormDob(e.target.value)}
+                  className="rounded-xl border-slate-200"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="set-id-type">ID type</Label>
+                <select
+                  id="set-id-type"
+                  value={formIdType}
+                  onChange={(e) => setFormIdType(e.target.value)}
+                  className="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
+                >
+                  <option value="passport">Passport</option>
+                  <option value="national-id">National ID</option>
+                  <option value="drivers-license">Driver&apos;s license</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="set-id-num">ID number</Label>
+                <Input
+                  id="set-id-num"
+                  value={formIdNumber}
+                  onChange={(e) => setFormIdNumber(e.target.value)}
+                  className="rounded-xl border-slate-200"
+                />
+              </div>
+              <Button
+                type="button"
+                className="w-full bg-emerald-600 hover:bg-emerald-700"
+                disabled={settingsSaveBusy || !formName.trim()}
+                onClick={() => void handleSaveProfile()}
+              >
+                {settingsSaveBusy ? 'Saving…' : 'Save profile'}
+              </Button>
+
+              <Separator className="my-2" />
+
+              <p className="text-sm font-medium text-slate-800">Change password</p>
+              {pwError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{pwError}</p>
+              )}
+              {pwSuccess && (
+                <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                  {pwSuccess}
+                </p>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="pw-current">Current password</Label>
+                <Input
+                  id="pw-current"
+                  type="password"
+                  autoComplete="current-password"
+                  value={pwCurrent}
+                  onChange={(e) => setPwCurrent(e.target.value)}
+                  className="rounded-xl border-slate-200"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pw-new">New password</Label>
+                <Input
+                  id="pw-new"
+                  type="password"
+                  autoComplete="new-password"
+                  value={pwNew}
+                  onChange={(e) => setPwNew(e.target.value)}
+                  className="rounded-xl border-slate-200"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pw-confirm">Confirm new password</Label>
+                <Input
+                  id="pw-confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  value={pwConfirm}
+                  onChange={(e) => setPwConfirm(e.target.value)}
+                  className="rounded-xl border-slate-200"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-emerald-200 text-emerald-800 hover:bg-emerald-50"
+                disabled={pwBusy}
+                onClick={() => void handleChangePassword()}
+              >
+                {pwBusy ? 'Updating…' : 'Update password'}
+              </Button>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setSettingsOpen(false)}>
               Close

@@ -26,6 +26,12 @@ import {
   type ProjectCreateResponse,
   type ProjectUpdateResponse,
 } from '@/lib/projects';
+import {
+  USERS_PREFIX,
+  userGrowthSeriesFromCount,
+  type UsersListResponse,
+  type UserListEntry,
+} from '@/lib/users';
 import logo from '../../assets/logo.svg';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -60,7 +66,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 export default function AdminDashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -101,6 +107,22 @@ const [adminProfile, setAdminProfile] = useState({
   name: "Admin",
   email: "admin@fibi.com",
 });
+  const [adminProfileSaving, setAdminProfileSaving] = useState(false);
+  const [adminProfileMsg, setAdminProfileMsg] = useState('');
+  const [adminProfileErr, setAdminProfileErr] = useState('');
+  const [adminPwCurrent, setAdminPwCurrent] = useState('');
+  const [adminPwNew, setAdminPwNew] = useState('');
+  const [adminPwConfirm, setAdminPwConfirm] = useState('');
+  const [adminPwBusy, setAdminPwBusy] = useState(false);
+  const [adminPwErr, setAdminPwErr] = useState('');
+  const [adminPwMsg, setAdminPwMsg] = useState('');
+
+  const [adminUsers, setAdminUsers] = useState<UserListEntry[]>([]);
+  const [adminUsersLoading, setAdminUsersLoading] = useState(false);
+  const [adminUsersError, setAdminUsersError] = useState('');
+  const [isDeleteUserModalOpen, setIsDeleteUserModalOpen] = useState(false);
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const [deleteUserBusy, setDeleteUserBusy] = useState(false);
 
   function defaultFundingDeadline(): string {
     const d = new Date();
@@ -159,10 +181,36 @@ const [adminProfile, setAdminProfile] = useState({
     };
   }, [user]);
 
+  useEffect(() => {
+    if (!user || user.role !== 'admin') return;
+    let cancelled = false;
+    (async () => {
+      setAdminUsersLoading(true);
+      setAdminUsersError('');
+      const res = await getJson<UsersListResponse>(USERS_PREFIX);
+      if (cancelled) return;
+      setAdminUsersLoading(false);
+      if (!res.ok) {
+        setAdminUsersError(res.error || 'Failed to load users.');
+        setAdminUsers([]);
+      } else {
+        setAdminUsers(res.data.data ?? []);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    setAdminProfile({ name: user.name, email: user.email });
+  }, [user]);
+
   if (!user) return null;
   if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
 
-  const totalUsers = 1247;
+  const totalUsers = adminUsers.length;
   const totalInvested = projects.reduce((sum, p) => sum + p.currentFunding, 0);
   const activeProjects = projects.filter(p => p.status === 'open').length;
   const platformRevenue = totalInvested * 0.02;
@@ -181,14 +229,7 @@ const [adminProfile, setAdminProfile] = useState({
     status: index % 2 === 0 ? 'completed' : 'pending'
   }));
 
-  const userGrowthData = [
-    { month: 'Oct 25', users: 820 },
-    { month: 'Nov 25', users: 935 },
-    { month: 'Dec 25', users: 1042 },
-    { month: 'Jan 26', users: 1128 },
-    { month: 'Feb 26', users: 1189 },
-    { month: 'Mar 26', users: 1247 }
-  ];
+  const userGrowthData = userGrowthSeriesFromCount(totalUsers);
   const investmentGrowthData = [
     { month: 'Oct 25', amount: 25000 },
     { month: 'Nov 25', amount: 42000 },
@@ -218,6 +259,7 @@ const [adminProfile, setAdminProfile] = useState({
 
   const sidebarItems = [
     { name: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4" />, key: 'dashboard' },
+    { name: 'Users', icon: <Users className="h-4 w-4" />, key: 'users' },
     { name: 'Projects', icon: <FolderOpen className="h-4 w-4" />, key: 'projects' },
     { name: 'Transactions', icon: <BarChart className="h-4 w-4" />, key: 'transactions' },
     { name: 'Analytics', icon: <TrendingUp className="h-4 w-4" />, key: 'analytics' },
@@ -372,6 +414,20 @@ const [adminProfile, setAdminProfile] = useState({
     setEditGalleryFiles([]);
   };
 
+  const handleDeleteUser = async () => {
+    if (!deleteUserId) return;
+    setDeleteUserBusy(true);
+    const res = await deleteJson<{ message?: string }>(`${USERS_PREFIX}/${deleteUserId}`);
+    setDeleteUserBusy(false);
+    if (!res.ok) {
+      setAdminUsersError(res.error);
+      return;
+    }
+    setAdminUsers((prev) => prev.filter((u) => u.id !== deleteUserId));
+    setDeleteUserId(null);
+    setIsDeleteUserModalOpen(false);
+  };
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar */}
@@ -416,13 +472,13 @@ const [adminProfile, setAdminProfile] = useState({
           <>
             <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-10">
-              <StatCard title="Total Users" value={totalUsers.toLocaleString()} icon={<Users className="h-4 w-4" />} subtitle="+8.2% from last month" />
+              <StatCard title="Total Users" value={totalUsers.toLocaleString()} icon={<Users className="h-4 w-4" />} subtitle="Registered accounts" />
               <StatCard title="Total Invested" value={formatCurrency(totalInvested)} icon={<DollarSign className="h-4 w-4" />} subtitle={`${totalInvestors} investors`} />
               <StatCard title="Active Projects" value={activeProjects} icon={<Activity className="h-4 w-4" />} subtitle={`Out of ${projects.length}`} />
               <StatCard title="Platform Revenue" value={formatCurrency(platformRevenue)} icon={<TrendingUp className="h-4 w-4" />} subtitle="2% platform fee" />
             </div>
             <Card className="mb-8">
-              <CardHeader><CardTitle className="text-xl font-semibold">User Growth</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-xl font-semibold">User growth (trend illustration)</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={userGrowthData}>
@@ -433,6 +489,70 @@ const [adminProfile, setAdminProfile] = useState({
                     <Line type="monotone" dataKey="users" stroke="#10b981" strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {activeSection === 'users' && (
+          <>
+            <h1 className="text-3xl font-bold mb-6">Users</h1>
+            {adminUsersError && (
+              <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+                {adminUsersError}
+              </p>
+            )}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">All accounts</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {adminUsersLoading ? (
+                  <p className="text-sm text-gray-500 py-8 text-center">Loading users…</p>
+                ) : adminUsers.length === 0 ? (
+                  <p className="text-sm text-gray-500 py-8 text-center">No users found.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Joined</TableHead>
+                        <TableHead className="w-[100px] text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {adminUsers.map((u) => (
+                        <TableRow key={u.id}>
+                          <TableCell className="font-medium">{u.name}</TableCell>
+                          <TableCell>{u.email}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="capitalize">
+                              {u.role}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{new Date(u.createdAt).toLocaleDateString()}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              disabled={u.id === user.id}
+                              title={u.id === user.id ? 'Cannot delete your own account' : 'Delete user'}
+                              onClick={() => {
+                                setDeleteUserId(u.id);
+                                setIsDeleteUserModalOpen(true);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </>
@@ -887,6 +1007,12 @@ Save Security Settings
 </CardHeader>
 
 <CardContent className="space-y-4">
+{adminProfileErr && (
+  <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">{adminProfileErr}</p>
+)}
+{adminProfileMsg && (
+  <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-md px-3 py-2">{adminProfileMsg}</p>
+)}
 
 <div>
 <Label>Name</Label>
@@ -902,16 +1028,95 @@ setAdminProfile({...adminProfile,name:e.target.value})
 <Label>Email</Label>
 <Input
 value={adminProfile.email}
-onChange={(e)=>
-setAdminProfile({...adminProfile,email:e.target.value})
-}
+disabled
+className="bg-gray-50"
 />
+<p className="text-xs text-gray-500 mt-1">Email is your login and cannot be changed here.</p>
 </div>
 
-<Button className="bg-emerald-600 hover:bg-emerald-700">
-Update Profile
+<Button
+  className="bg-emerald-600 hover:bg-emerald-700"
+  disabled={adminProfileSaving || !adminProfile.name.trim()}
+  onClick={() => {
+    void (async () => {
+      setAdminProfileErr('');
+      setAdminProfileMsg('');
+      setAdminProfileSaving(true);
+      const res = await putJson(`${USERS_PREFIX}/profile`, { name: adminProfile.name.trim() });
+      setAdminProfileSaving(false);
+      if (!res.ok) {
+        setAdminProfileErr(res.error);
+        return;
+      }
+      setAdminProfileMsg('Profile updated.');
+      await refreshUser();
+    })();
+  }}
+>
+{adminProfileSaving ? 'Saving…' : 'Update Profile'}
 </Button>
 
+</CardContent>
+</Card>
+
+<Card>
+<CardHeader>
+<CardTitle>Change password</CardTitle>
+</CardHeader>
+<CardContent className="space-y-4">
+{adminPwErr && (
+  <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">{adminPwErr}</p>
+)}
+{adminPwMsg && (
+  <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-md px-3 py-2">{adminPwMsg}</p>
+)}
+<div>
+<Label>Current password</Label>
+<Input type="password" autoComplete="current-password" value={adminPwCurrent} onChange={(e) => setAdminPwCurrent(e.target.value)} />
+</div>
+<div>
+<Label>New password</Label>
+<Input type="password" autoComplete="new-password" value={adminPwNew} onChange={(e) => setAdminPwNew(e.target.value)} />
+</div>
+<div>
+<Label>Confirm new password</Label>
+<Input type="password" autoComplete="new-password" value={adminPwConfirm} onChange={(e) => setAdminPwConfirm(e.target.value)} />
+</div>
+<Button
+  variant="outline"
+  className="border-emerald-200 text-emerald-800"
+  disabled={adminPwBusy}
+  onClick={() => {
+    void (async () => {
+      setAdminPwErr('');
+      setAdminPwMsg('');
+      if (adminPwNew !== adminPwConfirm) {
+        setAdminPwErr('New passwords do not match.');
+        return;
+      }
+      if (adminPwNew.length < 6) {
+        setAdminPwErr('New password must be at least 6 characters.');
+        return;
+      }
+      setAdminPwBusy(true);
+      const res = await putJson(`${USERS_PREFIX}/change-password`, {
+        currentPassword: adminPwCurrent,
+        newPassword: adminPwNew,
+      });
+      setAdminPwBusy(false);
+      if (!res.ok) {
+        setAdminPwErr(res.error);
+        return;
+      }
+      setAdminPwMsg('Password updated.');
+      setAdminPwCurrent('');
+      setAdminPwNew('');
+      setAdminPwConfirm('');
+    })();
+  }}
+>
+{adminPwBusy ? 'Updating…' : 'Update password'}
+</Button>
 </CardContent>
 </Card>
 
@@ -1088,6 +1293,31 @@ Update Profile
               <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
               <Button variant="destructive" disabled={adminBusy} onClick={() => void handleDeleteProject()}>
                 {adminBusy ? 'Deleting…' : 'Delete'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={isDeleteUserModalOpen}
+          onOpenChange={(open) => {
+            setIsDeleteUserModalOpen(open);
+            if (!open) setDeleteUserId(null);
+          }}
+        >
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Delete user</DialogTitle>
+            </DialogHeader>
+            <div className="py-4 text-gray-700">
+              This removes the user and their related data (investments, transactions). This cannot be undone.
+            </div>
+            <DialogFooter className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsDeleteUserModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" disabled={deleteUserBusy} onClick={() => void handleDeleteUser()}>
+                {deleteUserBusy ? 'Deleting…' : 'Delete user'}
               </Button>
             </DialogFooter>
           </DialogContent>
