@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router';
-import { MapPin, TrendingUp, Calendar, ChevronLeft, ChevronRight, Users } from 'lucide-react';
-import { projects } from '../data/projects';
+import { MapPin, TrendingUp, Calendar, ChevronLeft, ChevronRight, Users, Loader2 } from 'lucide-react';
+import type { Project } from '../data/projects';
+import { getJson } from '@/lib/api';
+import { normalizeApiProject, type ProjectListResponse } from '@/lib/projects';
 import { Card, CardContent, CardHeader } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -17,6 +19,30 @@ const SLIDER = [
 export default function Projects() {
   useEffect(() => {
     window.scrollTo(0, 0);
+  }, []);
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setListLoading(true);
+      setListError('');
+      const result = await getJson<ProjectListResponse>('/api/v1/projects');
+      if (cancelled) return;
+      if (!result.ok) {
+        setListError(result.error || 'Could not load projects.');
+        setProjects([]);
+      } else {
+        setProjects((result.data.projects ?? []).map(normalizeApiProject));
+      }
+      setListLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const [slide, setSlide] = useState(0);
@@ -51,6 +77,14 @@ export default function Projects() {
     open: 'bg-emerald-500 hover:bg-emerald-600 border-0 text-white',
     funded: 'bg-sky-600 hover:bg-sky-700 border-0 text-white',
     active: 'bg-violet-600 hover:bg-violet-700 border-0 text-white',
+    closed: 'bg-slate-600 hover:bg-slate-700 border-0 text-white',
+  };
+
+  const statusLabel = (s: Project['status']) => {
+    if (s === 'open') return 'Open';
+    if (s === 'funded') return 'Funded';
+    if (s === 'closed') return 'Closed';
+    return 'Active';
   };
 
   return (
@@ -63,7 +97,7 @@ export default function Projects() {
             fade ? 'opacity-0' : 'opacity-100'
           }`}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/45 to-emerald-900/25" />
+        <div className="absolute inset-0 bg-black/40" />
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center px-4 text-center">
           <p className="text-emerald-200/90 text-xs font-semibold uppercase tracking-[0.2em] mb-2">
             Investor marketplace
@@ -121,9 +155,24 @@ export default function Projects() {
           </Link>
         </div>
 
+        {listError && (
+          <p className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {listError}
+          </p>
+        )}
+
+        {listLoading ? (
+          <div className="flex flex-col items-center justify-center py-24 text-slate-500 gap-3">
+            <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
+            <p className="text-sm">Loading projects…</p>
+          </div>
+        ) : (
         <div className="grid gap-6 sm:gap-8 md:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => {
-            const pct = Math.min(100, (project.currentFunding / project.totalFunding) * 100);
+            const pct =
+              project.totalFunding > 0
+                ? Math.min(100, (project.currentFunding / project.totalFunding) * 100)
+                : 0;
             return (
               <Card
                 key={project.id}
@@ -137,7 +186,7 @@ export default function Projects() {
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent opacity-80" />
                   <Badge className={`absolute right-3 top-3 ${statusClass[project.status] ?? 'bg-slate-600'}`}>
-                    {project.status === 'open' ? 'Open' : project.status === 'funded' ? 'Funded' : 'Active'}
+                    {statusLabel(project.status)}
                   </Badge>
                   <Badge className="absolute left-3 top-3 border-0 bg-white/95 capitalize text-slate-800 shadow-sm">
                     {categoryLabel(project.category)}
@@ -187,6 +236,7 @@ export default function Projects() {
             );
           })}
         </div>
+        )}
       </div>
     </div>
   );

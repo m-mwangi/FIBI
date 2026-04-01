@@ -22,10 +22,10 @@ export function Footer() {
             </p>
           </div>
 
-          {/* Platform */}
-          <div>
-            <h4 className="text-white mb-4">Platform</h4>
-            <ul className="space-y-2 text-sm">
+          {/* Platform Links */}
+          <div className="space-y-2 text-sm">
+            <div className="h-6"></div> {/* Placeholder for removed title */}
+            <ul className="space-y-2">
               <li>
                 <Link to="/projects" className="hover:text-emerald-500 transition-colors">
                   Browse Projects
@@ -37,35 +37,25 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <a href="#" className="hover:text-emerald-500 transition-colors">
+                <Link to="/" className="hover:text-emerald-500 transition-colors">
                   How It Works
-                </a>
-              </li>
-              <li>
-                <a href="#" className="hover:text-emerald-500 transition-colors">
-                  Investment Guide
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
 
-          {/* Company */}
-          <div>
-            <h4 className="text-white mb-4">Company</h4>
-            <ul className="space-y-2 text-sm">
+          {/* Company Links */}
+          <div className="space-y-2 text-sm">
+            <div className="h-6"></div> {/* Placeholder for removed title */}
+            <ul className="space-y-2">
               <li>
-                <a href="#" className="hover:text-emerald-500 transition-colors">
+                <Link to="/" className="hover:text-emerald-500 transition-colors">
                   About Us
-                </a>
+                </Link>
               </li>
               <li>
                 <a href="#" className="hover:text-emerald-500 transition-colors">
                   Our Mission
-                </a>
-              </li>
-              <li>
-                <a href="#" className="hover:text-emerald-500 transition-colors">
-                  Careers
                 </a>
               </li>
               <li>
@@ -76,10 +66,10 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Legal */}
-          <div>
-            <h4 className="text-white mb-4">Legal</h4>
-            <ul className="space-y-2 text-sm">
+          {/* Legal Links */}
+          <div className="space-y-2 text-sm">
+            <div className="h-6"></div> {/* Placeholder for removed title */}
+            <ul className="space-y-2">
               <li>
                 <a href="#" className="hover:text-emerald-500 transition-colors">
                   Terms of Service
@@ -93,11 +83,6 @@ export function Footer() {
               <li>
                 <a href="#" className="hover:text-emerald-500 transition-colors">
                   Investment Risks
-                </a>
-              </li>
-              <li>
-                <a href="#" className="hover:text-emerald-500 transition-colors">
-                  Documentation
                 </a>
               </li>
             </ul>

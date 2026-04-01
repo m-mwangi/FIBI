@@ -1,0 +1,107 @@
+import { getApiBase } from '@/lib/api';
+import type { Project } from '@/app/data/projects';
+
+export type ApiProjectImage = {
+  id: string;
+  imageUrl: string;
+  projectId: string;
+  createdAt: string;
+};
+
+export type ApiTimelinePhase = {
+  id: string;
+  phase: string;
+  status: string;
+  projectId: string;
+};
+
+/** Raw project from GET /api/v1/projects */
+export type ApiProject = {
+  id: string;
+  title: string;
+  location: string;
+  category: string;
+  minInvestment: number;
+  totalFunding: number;
+  currentFunding: number;
+  investorsCount: number;
+  projectedROI: number;
+  payoutFrequency: string;
+  fundingDeadline: string;
+  description: string;
+  features: string[];
+  imageUrl: string;
+  status: string;
+  timeline: ApiTimelinePhase[];
+  projectImages?: ApiProjectImage[];
+};
+
+export function resolveMediaUrl(pathOrUrl: string | null | undefined): string {
+  if (!pathOrUrl) return '';
+  const s = pathOrUrl.trim();
+  if (!s) return '';
+  if (s.startsWith('http://') || s.startsWith('https://')) return s;
+  const base = getApiBase().replace(/\/$/, '');
+  const path = s.startsWith('/') ? s : `/${s}`;
+  return `${base}${path}`;
+}
+
+function dedupeUrls(urls: string[]): string[] {
+  return [...new Set(urls.filter(Boolean))];
+}
+
+function mapTimelineStatus(status: string): 'completed' | 'in-progress' | 'upcoming' {
+  if (status === 'in_progress' || status === 'in-progress') return 'in-progress';
+  if (status === 'completed') return 'completed';
+  return 'upcoming';
+}
+
+function mapProjectStatus(status: string): Project['status'] {
+  if (status === 'open' || status === 'funded' || status === 'active' || status === 'closed') {
+    return status;
+  }
+  return 'open';
+}
+
+/** Merge cover + ProjectImage rows into ordered unique gallery URLs (absolute). */
+export function normalizeApiProject(raw: ApiProject): Project {
+  const primaryRaw = raw.imageUrl || '';
+  const fromRows = (raw.projectImages ?? []).map((r) => r.imageUrl);
+  const orderedRaw = dedupeUrls([primaryRaw, ...fromRows]);
+
+  const images = orderedRaw.map((url) => resolveMediaUrl(url));
+  const imageUrl = resolveMediaUrl(primaryRaw) || images[0] || '';
+
+  const deadline =
+    typeof raw.fundingDeadline === 'string'
+      ? raw.fundingDeadline
+      : new Date(raw.fundingDeadline).toISOString();
+
+  return {
+    id: raw.id,
+    title: raw.title,
+    location: raw.location,
+    category: raw.category,
+    minInvestment: Number(raw.minInvestment),
+    totalFunding: Number(raw.totalFunding),
+    currentFunding: Number(raw.currentFunding),
+    investors: Number(raw.investorsCount ?? 0),
+    projectedROI: Number(raw.projectedROI),
+    payoutFrequency: raw.payoutFrequency,
+    fundingDeadline: deadline,
+    description: raw.description ?? '',
+    features: Array.isArray(raw.features) ? raw.features : [],
+    imageUrl,
+    images: images.length > 0 ? images : imageUrl ? [imageUrl] : [],
+    status: mapProjectStatus(raw.status),
+    timeline: (raw.timeline ?? []).map((t) => ({
+      phase: t.phase,
+      status: mapTimelineStatus(t.status),
+    })),
+  };
+}
+
+export type ProjectListResponse = { projects: ApiProject[] };
+export type ProjectOneResponse = { project: ApiProject };
+export type ProjectCreateResponse = { message?: string; project: ApiProject };
+export type ProjectUpdateResponse = { message?: string; project: ApiProject };

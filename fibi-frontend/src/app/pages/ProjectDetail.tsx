@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParams, Link } from 'react-router';
+import { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router';
 import {
   ArrowLeft,
   MapPin,
@@ -11,8 +11,9 @@ import {
   Home,
   Calendar,
   Users,
+  Loader2,
 } from 'lucide-react';
-import { projects } from '../data/projects';
+import type { Project } from '../data/projects';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -20,20 +21,74 @@ import { Progress } from '../components/ui/progress';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Separator } from '../components/ui/separator';
+import { getJson, postJson } from '@/lib/api';
+import { normalizeApiProject, type ProjectOneResponse } from '@/lib/projects';
+import { useAuth } from '../context/AuthContext';
 
 export default function ProjectDetail() {
   const { id } = useParams();
-  const project = projects.find((p) => p.id === id);
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const [project, setProject] = useState<Project | null>(null);
+  const [loadState, setLoadState] = useState<'loading' | 'error' | 'ready'>('loading');
+  const [loadError, setLoadError] = useState('');
   const [investmentAmount, setInvestmentAmount] = useState('');
   const [currentImage, setCurrentImage] = useState(0);
-  const images = project?.images || (project ? [project.imageUrl] : []);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [submitSuccess, setSubmitSuccess] = useState('');
 
-  if (!project) {
+  useEffect(() => {
+    if (!id) {
+      setProject(null);
+      setLoadState('error');
+      setLoadError('Missing project id.');
+      return;
+    }
+    let cancelled = false;
+    setLoadState('loading');
+    setLoadError('');
+    setCurrentImage(0);
+    (async () => {
+      const result = await getJson<ProjectOneResponse>(`/api/v1/projects/${id}`);
+      if (cancelled) return;
+      if (!result.ok) {
+        setProject(null);
+        setLoadState('error');
+        setLoadError(result.error || 'Project not found.');
+        return;
+      }
+      setProject(normalizeApiProject(result.data.project));
+      setLoadState('ready');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const images = project?.images?.length
+    ? project.images
+    : project
+      ? [project.imageUrl]
+      : [];
+
+  if (loadState === 'loading') {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center px-4 bg-gradient-to-b from-slate-50 to-emerald-50/30 gap-3">
+        <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
+        <p className="text-sm text-slate-600">Loading project…</p>
+      </div>
+    );
+  }
+
+  if (!project || loadState === 'error') {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center px-4 bg-gradient-to-b from-slate-50 to-emerald-50/30">
         <div className="rounded-3xl bg-white p-10 text-center shadow-xl ring-1 ring-slate-100 max-w-md">
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Project not found</h2>
-          <p className="text-slate-600 mb-6 text-sm">This listing may have moved. Browse all opportunities.</p>
+          <p className="text-slate-600 mb-6 text-sm">
+            {loadError || 'This listing may have moved. Browse all opportunities.'}
+          </p>
           <Link to="/projects">
             <Button className="rounded-xl bg-emerald-600 hover:bg-emerald-700">Back to projects</Button>
           </Link>
@@ -42,7 +97,10 @@ export default function ProjectDetail() {
     );
   }
 
-  const fundingPct = Math.min(100, (project.currentFunding / project.totalFunding) * 100);
+  const fundingPct =
+    project.totalFunding > 0
+      ? Math.min(100, (project.currentFunding / project.totalFunding) * 100)
+      : 0;
   const remaining = project.totalFunding - project.currentFunding;
 
   const formatCurrency = (amount: number) =>
@@ -81,7 +139,54 @@ export default function ProjectDetail() {
       ? 'bg-emerald-500 text-white border-0'
       : project.status === 'funded'
         ? 'bg-sky-600 text-white border-0'
-        : 'bg-violet-600 text-white border-0';
+        : project.status === 'closed'
+          ? 'bg-slate-600 text-white border-0'
+          : 'bg-violet-600 text-white border-0';
+
+  const statusHeadline =
+    project.status === 'open'
+      ? 'Open'
+      : project.status === 'funded'
+        ? 'Funded'
+        : project.status === 'closed'
+          ? 'Closed'
+          : 'Active';
+
+  const handleInvest = async () => {
+    setSubmitError('');
+    setSubmitSuccess('');
+
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    const amount = Number(investmentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setSubmitError('Enter a valid investment amount.');
+      return;
+    }
+
+    if (amount < project.minInvestment) {
+      setSubmitError(`Minimum investment is ${formatCurrency(project.minInvestment)}.`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    const result = await postJson<{ message: string }>('/api/v1/investments', {
+      projectId: project.id,
+      amountInvested: amount,
+    });
+    setIsSubmitting(false);
+
+    if (!result.ok) {
+      setSubmitError(result.error || 'Unable to complete investment.');
+      return;
+    }
+
+    setSubmitSuccess(result.data.message || 'Investment created successfully.');
+    setInvestmentAmount('');
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-emerald-50/25">
@@ -157,9 +262,7 @@ export default function ProjectDetail() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="mb-2 flex flex-wrap gap-2">
-                      <Badge className={statusBadge}>
-                        {project.status === 'open' ? 'Open' : project.status === 'funded' ? 'Funded' : 'Active'}
-                      </Badge>
+                      <Badge className={statusBadge}>{statusHeadline}</Badge>
                       <Badge variant="outline" className="capitalize border-slate-200 text-slate-700">
                         {categoryLabel(project.category)}
                       </Badge>
@@ -300,14 +403,24 @@ export default function ProjectDetail() {
                   )}
 
                   {project.status === 'open' ? (
-                    <Button className="h-12 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-base">
-                      Invest now
+                    <Button
+                      className="h-12 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-base"
+                      onClick={() => void handleInvest()}
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? 'Processing...' : 'Invest now'}
                     </Button>
                   ) : (
                     <Button className="h-12 w-full rounded-xl" size="lg" disabled variant="secondary">
-                      {project.status === 'funded' ? 'Fully funded' : 'Unavailable'}
+                      {project.status === 'funded'
+                        ? 'Fully funded'
+                        : project.status === 'closed'
+                          ? 'Closed'
+                          : 'Unavailable'}
                     </Button>
                   )}
+                  {submitError && <p className="text-center text-xs text-red-600">{submitError}</p>}
+                  {submitSuccess && <p className="text-center text-xs text-emerald-700">{submitSuccess}</p>}
                   <p className="text-center text-[11px] text-slate-400">Subject to terms and eligibility.</p>
                 </div>
               </CardContent>

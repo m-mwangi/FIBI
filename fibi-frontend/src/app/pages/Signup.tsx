@@ -6,8 +6,10 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
 import { Alert, AlertDescription } from '../components/ui/alert';
+import { Separator } from '../components/ui/separator';
 import { AlertCircle, Leaf } from 'lucide-react';
 import logo from '../../assets/fibi_logo.svg';
+import { startOAuth, type OAuthProvider } from '@/lib/socialOAuth';
 
 export default function Signup() {
   const [name, setName] = useState('');
@@ -21,7 +23,7 @@ export default function Signup() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const { signup } = useAuth();
+  const { signup, oauthLogin } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,6 +62,24 @@ export default function Signup() {
     }
   };
 
+  const handleOAuthSignup = async (provider: OAuthProvider) => {
+    setError('');
+    setIsLoading(true);
+    try {
+      const payload = await startOAuth(provider);
+      const result = await oauthLogin(provider, payload);
+      if (result.success) {
+        navigate('/dashboard', { replace: true });
+      } else {
+        setError(result.error);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'OAuth signup failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const inputClass = 'h-10 rounded-xl border-slate-200';
   const selectClass =
     'flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
@@ -72,7 +92,7 @@ export default function Signup() {
       <div className="relative mx-auto w-full max-w-2xl">
         <div className="mb-8 text-center">
           <Link to="/" className="inline-block">
-            <img src={logo} alt="FIBI" className="mx-auto h-10 sm:h-11 w-auto" />
+            <img src={logo} alt="FIBI" className="mx-auto h-50 sm:h-51 w-auto" />
           </Link>
           <p className="mt-3 flex items-center justify-center gap-2 text-sm text-slate-600">
             <Leaf className="h-4 w-4 text-emerald-600" />
@@ -224,6 +244,25 @@ export default function Signup() {
               >
                 {isLoading ? 'Creating account…' : 'Create account'}
               </Button>
+
+              <div className="relative py-1">
+                <Separator />
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-xs text-slate-500">
+                  or sign up with
+                </span>
+              </div>
+
+              <div className="grid gap-2">
+                <Button type="button" variant="outline" className="h-10 rounded-xl" disabled={isLoading} onClick={() => handleOAuthSignup('google')}>
+                  Continue with Google
+                </Button>
+                <Button type="button" variant="outline" className="h-10 rounded-xl" disabled={isLoading} onClick={() => handleOAuthSignup('facebook')}>
+                  Continue with Facebook
+                </Button>
+                <Button type="button" variant="outline" className="h-10 rounded-xl" disabled={isLoading} onClick={() => handleOAuthSignup('apple')}>
+                  Continue with Apple
+                </Button>
+              </div>
 
               <p className="text-center text-sm text-slate-600">
                 Already registered?{' '}

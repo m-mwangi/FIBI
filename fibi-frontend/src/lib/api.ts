@@ -86,3 +86,115 @@ export async function getJson<T>(
 
   return { ok: true, data: data as T };
 }
+
+export async function putJson<T>(
+  path: string,
+  body: unknown,
+  init?: { token?: string | null }
+): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  const token =
+    init?.token === undefined ? localStorage.getItem("fibi_token") : init.token;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(body),
+    credentials: "include",
+  });
+
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (!res.ok) {
+    return { ok: false, status: res.status, error: readErrorMessage(data) };
+  }
+
+  return { ok: true, data: data as T };
+}
+
+export async function deleteJson<T>(
+  path: string,
+  init?: { token?: string | null }
+): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+  const headers: Record<string, string> = {};
+  const token =
+    init?.token === undefined ? localStorage.getItem("fibi_token") : init.token;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "DELETE",
+    headers,
+    credentials: "include",
+  });
+
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (!res.ok) {
+    return { ok: false, status: res.status, error: readErrorMessage(data) };
+  }
+
+  return { ok: true, data: data as T };
+}
+
+export async function postFormData<T>(
+  path: string,
+  formData: FormData,
+  init?: { token?: string | null }
+): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+  const headers: Record<string, string> = {};
+  const token =
+    init?.token === undefined ? localStorage.getItem("fibi_token") : init.token;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers,
+    body: formData,
+    credentials: "include",
+  });
+
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (!res.ok) {
+    return { ok: false, status: res.status, error: readErrorMessage(data) };
+  }
+
+  return { ok: true, data: data as T };
+}
+
+export async function putFormData<T>(
+  path: string,
+  formData: FormData,
+  init?: { token?: string | null }
+): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+  const headers: Record<string, string> = {};
+  const token =
+    init?.token === undefined ? localStorage.getItem("fibi_token") : init.token;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PUT",
+    headers,
+    body: formData,
+    credentials: "include",
+  });
+
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (!res.ok) {
+    return { ok: false, status: res.status, error: readErrorMessage(data) };
+  }
+
+  return { ok: true, data: data as T };
+}

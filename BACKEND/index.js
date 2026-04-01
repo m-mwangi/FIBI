@@ -1,12 +1,17 @@
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const path = require("path");
 const config = require("./config/env")
 const { prisma, connectDB, disconnectDB } = require('./config/db');
 const errorHandler = require('./middleware/error.middleware');
 
 //Import routes
 const authRoutes = require('./routes/auth.routes');
+const oauthRoutes = require('./routes/oauth.routes');
+const investmentRoutes = require('./routes/investment.routes');
+const projectRoutes = require("./routes/project.route");
+const userRoutes = require('./routes/user.routes');
 
 
 const app = express();
@@ -26,6 +31,7 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Basic route
 app.get('/', (req, res) => {
@@ -34,6 +40,10 @@ app.get('/', (req, res) => {
 
 //Use routes
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/oauth', oauthRoutes);
+app.use('/api/v1/investments', investmentRoutes);
+app.use("/api/v1/projects", projectRoutes);
+app.use('/api/v1/users', userRoutes);
 
 // Error Handler Middleware
 app.use(errorHandler);
