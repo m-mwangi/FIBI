@@ -20,7 +20,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { projects, type Project } from '../data/projects';
+import type { Project } from '../data/projects';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -55,6 +55,7 @@ import {
 } from 'recharts';
 import logo from '../../assets/fibi_logo.svg';
 import { getJson } from '@/lib/api';
+import { normalizeApiProject, resolveMediaUrl, type ProjectListResponse } from '@/lib/projects';
 
 type ApiInvestment = {
   id: string;
@@ -101,6 +102,7 @@ export default function UserDashboard() {
   const [investments, setInvestments] = useState<ApiInvestment[]>([]);
   const [isLoadingInvestments, setIsLoadingInvestments] = useState(true);
   const [investmentsError, setInvestmentsError] = useState('');
+  const [platformProjects, setPlatformProjects] = useState<Project[]>([]);
 
   const handleLogout = () => {
     void logout().then(() => navigate('/', { replace: true }));
@@ -126,6 +128,20 @@ export default function UserDashboard() {
       setIsLoadingInvestments(false);
     })();
 
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const result = await getJson<ProjectListResponse>('/api/v1/projects');
+      if (cancelled) return;
+      if (result.ok) {
+        setPlatformProjects((result.data.projects ?? []).map(normalizeApiProject));
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -208,10 +224,12 @@ export default function UserDashboard() {
   );
 
   const suggestedProjects = useMemo(() => {
-    const notInvested = projects.filter((p) => !investedIds.has(p.id));
+    const open = platformProjects.filter((p) => p.status === 'open');
+    const notInvested = open.filter((p) => !investedIds.has(p.id));
     if (notInvested.length > 0) return notInvested.slice(0, 3);
-    return projects.slice(0, 3);
-  }, [investedIds]);
+    if (open.length > 0) return open.slice(0, 3);
+    return platformProjects.slice(0, 3);
+  }, [investedIds, platformProjects]);
 
   const upcomingPayouts = useMemo(
     () => [
@@ -781,7 +799,7 @@ export default function UserDashboard() {
                         >
                           <div className="aspect-[16/10] bg-slate-100 overflow-hidden relative">
                             <img
-                              src={p.imageUrl}
+                              src={resolveMediaUrl(p.imageUrl)}
                               alt=""
                               className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
                             />
@@ -850,7 +868,7 @@ export default function UserDashboard() {
                               {project && (
                                 <div className="sm:w-44 md:w-52 shrink-0 aspect-[4/3] sm:aspect-auto sm:min-h-[200px] bg-slate-100">
                                   <img
-                                    src={project.imageUrl}
+                                    src={resolveMediaUrl(project.imageUrl)}
                                     alt=""
                                     className="w-full h-full object-cover"
                                   />

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Navigate, useNavigate } from 'react-router';
 import {
   Users,
@@ -18,7 +18,14 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
-import { projects as projectsData } from '../data/projects';
+import type { Project } from '../data/projects';
+import { getJson, putJson, deleteJson, postFormData, putFormData } from '@/lib/api';
+import {
+  normalizeApiProject,
+  type ProjectListResponse,
+  type ProjectCreateResponse,
+  type ProjectUpdateResponse,
+} from '@/lib/projects';
 import logo from '../../assets/logo.svg';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -49,6 +56,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 export default function AdminDashboard() {
@@ -94,21 +102,62 @@ const [adminProfile, setAdminProfile] = useState({
   email: "admin@fibi.com",
 });
 
-  const [projects, setProjects] = useState(projectsData);
+  function defaultFundingDeadline(): string {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().slice(0, 10);
+  }
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState('');
+  const [adminBusy, setAdminBusy] = useState(false);
+  const [adminFormError, setAdminFormError] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newProject, setNewProject] = useState({
     title: '',
     category: '',
     location: '',
+    minInvestment: 100,
     totalFunding: 0,
     currentFunding: 0,
     investors: 0,
+    projectedROI: 10,
+    payoutFrequency: 'Quarterly',
+    fundingDeadline: defaultFundingDeadline(),
+    description: '',
+    featuresText: '',
     status: 'open',
   });
+  const [addCoverFile, setAddCoverFile] = useState<File | null>(null);
+  const [addGalleryFiles, setAddGalleryFiles] = useState<File[]>([]);
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [selectedProject, setSelectedProject] = useState<typeof projectsData[0] | null>(null);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [editCoverFile, setEditCoverFile] = useState<File | null>(null);
+  const [editGalleryFiles, setEditGalleryFiles] = useState<File[]>([]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'admin') return;
+    let cancelled = false;
+    (async () => {
+      setProjectsLoading(true);
+      setProjectsError('');
+      const res = await getJson<ProjectListResponse>('/api/v1/projects');
+      if (cancelled) return;
+      if (!res.ok) {
+        setProjectsError(res.error || 'Failed to load projects.');
+        setProjects([]);
+      } else {
+        setProjects((res.data.projects ?? []).map(normalizeApiProject));
+      }
+      setProjectsLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   if (!user) return null;
   if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
@@ -176,33 +225,151 @@ const [adminProfile, setAdminProfile] = useState({
   ];
 
   const handleInputChange = (field: string, value: string | number) => {
-    setNewProject(prev => ({ ...prev, [field]: value }));
+    setNewProject((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleAddProject = () => {
-    const projectToAdd = { ...newProject, id: (projects.length + 1).toString() };
-    setProjects([projectToAdd, ...projects]);
-    setIsAddModalOpen(false);
-    setNewProject({ title: '', category: '', location: '', totalFunding: 0, currentFunding: 0, investors: 0, status: 'open' });
+  const resetAddForm = () => {
+    setNewProject({
+      title: '',
+      category: '',
+      location: '',
+      minInvestment: 100,
+      totalFunding: 0,
+      currentFunding: 0,
+      investors: 0,
+      projectedROI: 10,
+      payoutFrequency: 'Quarterly',
+      fundingDeadline: defaultFundingDeadline(),
+      description: '',
+      featuresText: '',
+      status: 'open',
+    });
+    setAddCoverFile(null);
+    setAddGalleryFiles([]);
   };
 
-  const handleDeleteProject = () => {
-    if (deleteProjectId) {
-      setProjects(projects.filter(p => p.id !== deleteProjectId));
-      setDeleteProjectId(null);
-      setIsDeleteModalOpen(false);
+  const handleAddProject = async () => {
+    setAdminFormError('');
+    if (!newProject.title.trim()) {
+      setAdminFormError('Title is required.');
+      return;
     }
+    if (!addCoverFile) {
+      setAdminFormError('Upload a primary cover image (required by the server).');
+      return;
+    }
+    setAdminBusy(true);
+    const features = newProject.featuresText
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const fd = new FormData();
+    fd.append('title', newProject.title.trim());
+    fd.append('location', newProject.location.trim());
+    fd.append('category', newProject.category.trim());
+    fd.append('minInvestment', String(newProject.minInvestment));
+    fd.append('totalFunding', String(newProject.totalFunding));
+    fd.append('currentFunding', String(newProject.currentFunding));
+    fd.append('investorsCount', String(newProject.investors));
+    fd.append('projectedROI', String(newProject.projectedROI));
+    fd.append('payoutFrequency', newProject.payoutFrequency);
+    fd.append('fundingDeadline', newProject.fundingDeadline);
+    fd.append('description', newProject.description.trim() || '—');
+    fd.append('features', JSON.stringify(features));
+    fd.append('status', newProject.status);
+    fd.append('timeline', JSON.stringify([{ phase: 'Kickoff', status: 'upcoming' }]));
+    fd.append('image', addCoverFile);
+    addGalleryFiles.forEach((f) => fd.append('images', f));
+    const res = await postFormData<ProjectCreateResponse>('/api/v1/projects', fd);
+    setAdminBusy(false);
+    if (!res.ok) {
+      setAdminFormError(res.error);
+      return;
+    }
+    const created = normalizeApiProject(res.data.project);
+    setProjects((prev) => [created, ...prev]);
+    setIsAddModalOpen(false);
+    resetAddForm();
   };
 
-  const openProjectDetails = (project: typeof projectsData[0]) => {
+  const handleDeleteProject = async () => {
+    if (!deleteProjectId) return;
+    setAdminBusy(true);
+    const res = await deleteJson<{ message?: string }>(`/api/v1/projects/${deleteProjectId}`);
+    setAdminBusy(false);
+    if (!res.ok) {
+      setAdminFormError(res.error);
+      return;
+    }
+    setProjects((prev) => prev.filter((p) => p.id !== deleteProjectId));
+    setDeleteProjectId(null);
+    setIsDeleteModalOpen(false);
+  };
+
+  const openProjectDetails = (project: Project) => {
     setSelectedProject({ ...project });
+    setEditCoverFile(null);
+    setEditGalleryFiles([]);
+    setAdminFormError('');
     setIsDetailsModalOpen(true);
   };
 
-  const handleUpdateProject = () => {
+  const handleUpdateProject = async () => {
     if (!selectedProject) return;
-    setProjects(prev => prev.map(p => p.id === selectedProject.id ? selectedProject : p));
+    setAdminFormError('');
+    setAdminBusy(true);
+    const id = selectedProject.id;
+    let res:
+      | { ok: true; data: ProjectUpdateResponse }
+      | { ok: false; status: number; error: string };
+
+    if (editCoverFile || editGalleryFiles.length > 0) {
+      const fd = new FormData();
+      fd.append('title', selectedProject.title);
+      fd.append('location', selectedProject.location);
+      fd.append('category', selectedProject.category);
+      fd.append('minInvestment', String(selectedProject.minInvestment));
+      fd.append('totalFunding', String(selectedProject.totalFunding));
+      fd.append('currentFunding', String(selectedProject.currentFunding));
+      fd.append('investorsCount', String(selectedProject.investors));
+      fd.append('projectedROI', String(selectedProject.projectedROI));
+      fd.append('payoutFrequency', selectedProject.payoutFrequency);
+      fd.append('fundingDeadline', selectedProject.fundingDeadline);
+      fd.append('description', selectedProject.description);
+      fd.append('features', JSON.stringify(selectedProject.features));
+      fd.append('status', selectedProject.status);
+      if (editCoverFile) fd.append('image', editCoverFile);
+      editGalleryFiles.forEach((f) => fd.append('images', f));
+      res = await putFormData<ProjectUpdateResponse>(`/api/v1/projects/${id}`, fd);
+    } else {
+      res = await putJson<ProjectUpdateResponse>(`/api/v1/projects/${id}`, {
+        title: selectedProject.title,
+        location: selectedProject.location,
+        category: selectedProject.category,
+        minInvestment: selectedProject.minInvestment,
+        totalFunding: selectedProject.totalFunding,
+        currentFunding: selectedProject.currentFunding,
+        investorsCount: selectedProject.investors,
+        projectedROI: selectedProject.projectedROI,
+        payoutFrequency: selectedProject.payoutFrequency,
+        fundingDeadline: selectedProject.fundingDeadline,
+        description: selectedProject.description,
+        features: selectedProject.features,
+        status: selectedProject.status,
+      });
+    }
+
+    setAdminBusy(false);
+    if (!res.ok) {
+      setAdminFormError(res.error);
+      return;
+    }
+    const updated = normalizeApiProject(res.data.project);
+    setProjects((prev) => prev.map((p) => (p.id === id ? updated : p)));
     setIsDetailsModalOpen(false);
+    setSelectedProject(null);
+    setEditCoverFile(null);
+    setEditGalleryFiles([]);
   };
 
   return (
@@ -275,15 +442,30 @@ const [adminProfile, setAdminProfile] = useState({
         {activeSection === 'projects' && (
           <>
             <h1 className="text-3xl font-bold mb-6">Projects</h1>
+            {projectsError && (
+              <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+                {projectsError}
+              </p>
+            )}
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setIsAddModalOpen(true)}>
+                  <Button
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                    onClick={() => {
+                      setAdminFormError('');
+                      resetAddForm();
+                      setIsAddModalOpen(true);
+                    }}
+                  >
                     <Plus className="h-4 w-4 mr-2"/> New Project
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
+                {projectsLoading ? (
+                  <p className="text-sm text-gray-500 py-8 text-center">Loading projects…</p>
+                ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -302,7 +484,12 @@ const [adminProfile, setAdminProfile] = useState({
                         <TableCell className="font-medium">{p.title}</TableCell>
                         <TableCell><Badge variant="outline">{p.category}</Badge></TableCell>
                         <TableCell>{p.location}</TableCell>
-                        <TableCell>{((p.currentFunding/p.totalFunding)*100).toFixed(0)}%</TableCell>
+                        <TableCell>
+                          {p.totalFunding > 0
+                            ? ((p.currentFunding / p.totalFunding) * 100).toFixed(0)
+                            : '0'}
+                          %
+                        </TableCell>
                         <TableCell>{p.investors}</TableCell>
                         <TableCell><Badge>{p.status}</Badge></TableCell>
                         <TableCell className="flex justify-end gap-2">
@@ -317,6 +504,7 @@ const [adminProfile, setAdminProfile] = useState({
                     ))}
                   </TableBody>
                 </Table>
+                )}
               </CardContent>
             </Card>
           </>
@@ -731,31 +919,160 @@ Update Profile
 </>
 )}
         {/* Add Project Modal */}
-        <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader><DialogTitle>Add New Project</DialogTitle></DialogHeader>
+        <Dialog
+          open={isAddModalOpen}
+          onOpenChange={(open) => {
+            setIsAddModalOpen(open);
+            if (!open) {
+              setAdminFormError('');
+              resetAddForm();
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New Project</DialogTitle>
+            </DialogHeader>
+            {adminFormError && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">{adminFormError}</p>
+            )}
             <div className="space-y-4">
-              <div><Label>Project Title</Label><Input value={newProject.title} onChange={e => handleInputChange('title', e.target.value)} /></div>
-              <div><Label>Category</Label><Input value={newProject.category} onChange={e => handleInputChange('category', e.target.value)} /></div>
-              <div><Label>Location</Label><Input value={newProject.location} onChange={e => handleInputChange('location', e.target.value)} /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label>Total Funding</Label><Input type="number" value={newProject.totalFunding} onChange={e => handleInputChange('totalFunding', Number(e.target.value))} /></div>
+              <div>
+                <Label>Project title</Label>
+                <Input value={newProject.title} onChange={(e) => handleInputChange('title', e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Status</Label>
-                  <Select value={newProject.status} onValueChange={value => handleInputChange('status', value)}>
-                    <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="open">Open</SelectItem>
-                      <SelectItem value="funded">Funded</SelectItem>
-                      <SelectItem value="closed">Closed</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label>Category</Label>
+                  <Input value={newProject.category} onChange={(e) => handleInputChange('category', e.target.value)} />
                 </div>
+                <div>
+                  <Label>Location</Label>
+                  <Input value={newProject.location} onChange={(e) => handleInputChange('location', e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Min investment (USD)</Label>
+                  <Input
+                    type="number"
+                    value={newProject.minInvestment}
+                    onChange={(e) => handleInputChange('minInvestment', Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <Label>Projected ROI (%)</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={newProject.projectedROI}
+                    onChange={(e) => handleInputChange('projectedROI', Number(e.target.value))}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Total funding</Label>
+                  <Input
+                    type="number"
+                    value={newProject.totalFunding}
+                    onChange={(e) => handleInputChange('totalFunding', Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <Label>Current funding</Label>
+                  <Input
+                    type="number"
+                    value={newProject.currentFunding}
+                    onChange={(e) => handleInputChange('currentFunding', Number(e.target.value))}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Investors count</Label>
+                  <Input
+                    type="number"
+                    value={newProject.investors}
+                    onChange={(e) => handleInputChange('investors', Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <Label>Payout frequency</Label>
+                  <Input
+                    value={newProject.payoutFrequency}
+                    onChange={(e) => handleInputChange('payoutFrequency', e.target.value)}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Funding deadline</Label>
+                <Input
+                  type="date"
+                  value={newProject.fundingDeadline}
+                  onChange={(e) => handleInputChange('fundingDeadline', e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Description</Label>
+                <Textarea
+                  className="min-h-[80px]"
+                  value={newProject.description}
+                  onChange={(e) => handleInputChange('description', e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Features (one per line)</Label>
+                <Textarea
+                  className="min-h-[72px]"
+                  placeholder={'One feature per line'}
+                  value={newProject.featuresText}
+                  onChange={(e) => handleInputChange('featuresText', e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Cover image (required)</Label>
+                <Input
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  onChange={(e) => setAddCoverFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+              <div>
+                <Label>Gallery images (optional)</Label>
+                <Input
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  multiple
+                  onChange={(e) => setAddGalleryFiles(e.target.files ? Array.from(e.target.files) : [])}
+                />
+              </div>
+              <div>
+                <Label>Status</Label>
+                <Select value={newProject.status} onValueChange={(value) => handleInputChange('status', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="open">Open</SelectItem>
+                    <SelectItem value="funded">Funded</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <DialogFooter className="mt-4 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
-              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleAddProject}>Add Project</Button>
+              <Button variant="outline" onClick={() => setIsAddModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                disabled={adminBusy}
+                onClick={() => void handleAddProject()}
+              >
+                {adminBusy ? 'Saving…' : 'Add project'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -769,30 +1086,192 @@ Update Profile
             </div>
             <DialogFooter className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
-              <Button variant="destructive" onClick={handleDeleteProject}>Delete</Button>
+              <Button variant="destructive" disabled={adminBusy} onClick={() => void handleDeleteProject()}>
+                {adminBusy ? 'Deleting…' : 'Delete'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
         {/* Editable Project Details Modal */}
-        <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader><DialogTitle>Project Details</DialogTitle></DialogHeader>
+        <Dialog open={isDetailsModalOpen} onOpenChange={(open) => {
+          setIsDetailsModalOpen(open);
+          if (!open) {
+            setAdminFormError('');
+            setEditCoverFile(null);
+            setEditGalleryFiles([]);
+          }
+        }}>
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Project details</DialogTitle>
+            </DialogHeader>
+            {adminFormError && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">{adminFormError}</p>
+            )}
             {selectedProject && (
               <div className="space-y-3">
-                <div><Label>Title</Label><Input value={selectedProject.title} onChange={e => setSelectedProject({...selectedProject, title: e.target.value})} /></div>
-                <div><Label>Category</Label><Input value={selectedProject.category} onChange={e => setSelectedProject({...selectedProject, category: e.target.value})} /></div>
-                <div><Label>Location</Label><Input value={selectedProject.location} onChange={e => setSelectedProject({...selectedProject, location: e.target.value})} /></div>
-                <div><Label>Total Funding</Label><Input type="number" value={selectedProject.totalFunding} onChange={e => setSelectedProject({...selectedProject, totalFunding: Number(e.target.value)})} /></div>
-                <div><Label>Current Funding</Label><Input type="number" value={selectedProject.currentFunding} onChange={e => setSelectedProject({...selectedProject, currentFunding: Number(e.target.value)})} /></div>
-                <div><Label>Investors</Label><Input type="number" value={selectedProject.investors} onChange={e => setSelectedProject({...selectedProject, investors: Number(e.target.value)})} /></div>
+                <div>
+                  <Label>Title</Label>
+                  <Input
+                    value={selectedProject.title}
+                    onChange={(e) => setSelectedProject({ ...selectedProject, title: e.target.value })}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Category</Label>
+                    <Input
+                      value={selectedProject.category}
+                      onChange={(e) => setSelectedProject({ ...selectedProject, category: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Location</Label>
+                    <Input
+                      value={selectedProject.location}
+                      onChange={(e) => setSelectedProject({ ...selectedProject, location: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Min investment</Label>
+                    <Input
+                      type="number"
+                      value={selectedProject.minInvestment}
+                      onChange={(e) =>
+                        setSelectedProject({ ...selectedProject, minInvestment: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Projected ROI (%)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={selectedProject.projectedROI}
+                      onChange={(e) =>
+                        setSelectedProject({ ...selectedProject, projectedROI: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Total funding</Label>
+                    <Input
+                      type="number"
+                      value={selectedProject.totalFunding}
+                      onChange={(e) =>
+                        setSelectedProject({ ...selectedProject, totalFunding: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Current funding</Label>
+                    <Input
+                      type="number"
+                      value={selectedProject.currentFunding}
+                      onChange={(e) =>
+                        setSelectedProject({ ...selectedProject, currentFunding: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Investors</Label>
+                    <Input
+                      type="number"
+                      value={selectedProject.investors}
+                      onChange={(e) =>
+                        setSelectedProject({ ...selectedProject, investors: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Payout frequency</Label>
+                    <Input
+                      value={selectedProject.payoutFrequency}
+                      onChange={(e) =>
+                        setSelectedProject({ ...selectedProject, payoutFrequency: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Funding deadline</Label>
+                  <Input
+                    type="date"
+                    value={selectedProject.fundingDeadline.slice(0, 10)}
+                    onChange={(e) =>
+                      setSelectedProject({
+                        ...selectedProject,
+                        fundingDeadline: new Date(e.target.value + 'T12:00:00').toISOString(),
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Description</Label>
+                  <Textarea
+                    className="min-h-[80px]"
+                    value={selectedProject.description}
+                    onChange={(e) => setSelectedProject({ ...selectedProject, description: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Features (one per line)</Label>
+                  <Textarea
+                    className="min-h-[72px]"
+                    value={selectedProject.features.join('\n')}
+                    onChange={(e) =>
+                      setSelectedProject({
+                        ...selectedProject,
+                        features: e.target.value
+                          .split('\n')
+                          .map((s) => s.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>New cover image (optional)</Label>
+                  <Input
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    onChange={(e) => setEditCoverFile(e.target.files?.[0] ?? null)}
+                  />
+                </div>
+                <div>
+                  <Label>Add gallery images (optional)</Label>
+                  <Input
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    multiple
+                    onChange={(e) => setEditGalleryFiles(e.target.files ? Array.from(e.target.files) : [])}
+                  />
+                </div>
                 <div>
                   <Label>Status</Label>
-                  <Select value={selectedProject.status} onValueChange={value => setSelectedProject({...selectedProject, status: value})}>
-                    <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                  <Select
+                    value={selectedProject.status}
+                    onValueChange={(value) =>
+                      setSelectedProject({
+                        ...selectedProject,
+                        status: value as Project['status'],
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="open">Open</SelectItem>
                       <SelectItem value="funded">Funded</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="closed">Closed</SelectItem>
                     </SelectContent>
                   </Select>
@@ -800,8 +1279,16 @@ Update Profile
               </div>
             )}
             <DialogFooter className="mt-4 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsDetailsModalOpen(false)}>Cancel</Button>
-              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleUpdateProject}>Update</Button>
+              <Button variant="outline" onClick={() => setIsDetailsModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                disabled={adminBusy}
+                onClick={() => void handleUpdateProject()}
+              >
+                {adminBusy ? 'Saving…' : 'Update'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

@@ -118,9 +118,8 @@ model Project {
   payoutFrequency String
   fundingDeadline DateTime
   description     String
-  features        String[]
+  features        String[] @default([])
   imageUrl        String
-  images          String[]
   // ENUM USED HERE
   status          ProjectStatus @default(open)
   createdAt       DateTime @default(now())
@@ -129,6 +128,16 @@ model Project {
   //Relationships
   timeline Timeline[] //One to many relationship with Timeline phases
   investments Investment[] //One to many relationship with Investment
+  projectImages ProjectImage[]
+}
+
+model ProjectImage {
+  id        String   @id @default(uuid())
+  imageUrl  String
+  projectId String
+  createdAt DateTime @default(now())
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 //////////////////////////////////////////////////////
