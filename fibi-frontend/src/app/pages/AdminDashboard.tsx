@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Navigate, useNavigate } from 'react-router';
 import {
   Users,
@@ -14,7 +14,8 @@ import {
   Settings,
   LogOut,
   Plus,
-  Trash2
+  Trash2,
+  XCircle,
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
@@ -64,6 +65,27 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+
+const SETTINGS_API = '/api/v1/settings';
+
+type GlobalSettingsDTO = {
+  id: string;
+  platformName: string;
+  supportEmail: string;
+  contactPhone: string;
+  minInvestment: number;
+  maxInvestment: number;
+  platformFee: number;
+  currency: string;
+  depositsEnabled: boolean;
+  withdrawalsEnabled: boolean;
+  transactionFee: number;
+  emailNotifications: boolean;
+  investmentEmails: boolean;
+  adminAlerts: boolean;
+  twoFactorAuth: boolean;
+  sessionTimeout: number;
+};
 
 export default function AdminDashboard() {
   const { user, logout, refreshUser } = useAuth();
@@ -160,6 +182,53 @@ const [adminProfile, setAdminProfile] = useState({
   const [editCoverFile, setEditCoverFile] = useState<File | null>(null);
   const [editGalleryFiles, setEditGalleryFiles] = useState<File[]>([]);
 
+  type AdminTransactionRow = {
+    id: string;
+    userId: string;
+    amount: number;
+    type: 'DEPOSIT' | 'WITHDRAWAL' | 'INVESTMENT' | 'PAYOUT';
+    status: 'pending' | 'completed' | 'failed';
+    createdAt: string;
+    user: { name: string; email: string };
+  };
+
+  const [adminTransactions, setAdminTransactions] = useState<AdminTransactionRow[]>([]);
+  const [adminTransactionsLoading, setAdminTransactionsLoading] = useState(false);
+  const [adminTransactionsError, setAdminTransactionsError] = useState('');
+
+  const [settingsPanelLoading, setSettingsPanelLoading] = useState(false);
+  const [settingsPanelError, setSettingsPanelError] = useState('');
+  const [settingsSavingKey, setSettingsSavingKey] = useState<string | null>(null);
+  const [settingsFlash, setSettingsFlash] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  const applySettingsDtoToForm = useCallback((s: GlobalSettingsDTO) => {
+    setPlatformSettings({
+      platformName: s.platformName,
+      supportEmail: s.supportEmail,
+      contactPhone: s.contactPhone,
+    });
+    setInvestmentRules({
+      minInvestment: s.minInvestment,
+      maxInvestment: s.maxInvestment,
+      platformFee: s.platformFee,
+      currency: s.currency,
+    });
+    setPaymentSettings({
+      depositsEnabled: s.depositsEnabled,
+      withdrawalsEnabled: s.withdrawalsEnabled,
+      transactionFee: s.transactionFee,
+    });
+    setNotificationSettings({
+      emailNotifications: s.emailNotifications,
+      investmentEmails: s.investmentEmails,
+      adminAlerts: s.adminAlerts,
+    });
+    setSecuritySettings({
+      twoFactorAuth: s.twoFactorAuth,
+      sessionTimeout: s.sessionTimeout,
+    });
+  }, []);
+
   useEffect(() => {
     if (!user || user.role !== 'admin') return;
     let cancelled = false;
@@ -203,6 +272,56 @@ const [adminProfile, setAdminProfile] = useState({
   }, [user]);
 
   useEffect(() => {
+    if (!user || user.role !== 'admin' || activeSection !== 'transactions') return;
+    let cancelled = false;
+    (async () => {
+      setAdminTransactionsLoading(true);
+      setAdminTransactionsError('');
+      const res = await getJson<{ transactions: AdminTransactionRow[] }>(
+        '/api/v1/transactions/all'
+      );
+      if (cancelled) return;
+      setAdminTransactionsLoading(false);
+      if (!res.ok) {
+        setAdminTransactionsError(res.error || 'Failed to load transactions.');
+        setAdminTransactions([]);
+      } else {
+        setAdminTransactions(res.data.transactions ?? []);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, activeSection]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'admin' || activeSection !== 'settings') return;
+    let cancelled = false;
+    (async () => {
+      setSettingsPanelLoading(true);
+      setSettingsPanelError('');
+      setSettingsFlash(null);
+      const res = await getJson<{ settings: GlobalSettingsDTO }>(SETTINGS_API);
+      if (cancelled) return;
+      setSettingsPanelLoading(false);
+      if (!res.ok) {
+        setSettingsPanelError(res.error || 'Failed to load settings.');
+        return;
+      }
+      applySettingsDtoToForm(res.data.settings);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, activeSection, applySettingsDtoToForm]);
+
+  useEffect(() => {
+    if (activeSection !== 'settings') {
+      setSettingsFlash(null);
+    }
+  }, [activeSection]);
+
+  useEffect(() => {
     if (!user) return;
     setAdminProfile({ name: user.name, email: user.email });
   }, [user]);
@@ -219,15 +338,20 @@ const [adminProfile, setAdminProfile] = useState({
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
 
-  const kenyanNames = ['Mwangi Kamau','Achieng Odhiambo','Juma Wanyama','Njeri Wambui','Otieno Odongo','Wanjiku Mwikali'];
-  const recentTransactions = projects.map((project, index) => ({
-    id: (index + 1).toString(),
-    investor: kenyanNames[index % kenyanNames.length],
-    project: project.title,
-    amount: Math.floor(Math.random() * 15000) + 1000,
-    date: new Date(Date.now() - index * 86400000).toISOString(),
-    status: index % 2 === 0 ? 'completed' : 'pending'
-  }));
+  const transactionTypeLabel = (t: AdminTransactionRow['type']) => {
+    switch (t) {
+      case 'DEPOSIT':
+        return 'Deposit';
+      case 'WITHDRAWAL':
+        return 'Withdrawal';
+      case 'INVESTMENT':
+        return 'Investment';
+      case 'PAYOUT':
+        return 'Payout';
+      default:
+        return t;
+    }
+  };
 
   const userGrowthData = userGrowthSeriesFromCount(totalUsers);
   const investmentGrowthData = [
@@ -288,6 +412,95 @@ const [adminProfile, setAdminProfile] = useState({
     });
     setAddCoverFile(null);
     setAddGalleryFiles([]);
+  };
+
+  const handleSavePlatformSettings = async () => {
+    setSettingsFlash(null);
+    if (!platformSettings.platformName.trim()) {
+      setSettingsFlash({ type: 'err', text: 'Platform name is required.' });
+      return;
+    }
+    setSettingsSavingKey('platform');
+    const res = await putJson<{ settings: GlobalSettingsDTO }>(SETTINGS_API, {
+      platformName: platformSettings.platformName.trim(),
+      supportEmail: platformSettings.supportEmail.trim(),
+      contactPhone: platformSettings.contactPhone.trim(),
+    });
+    setSettingsSavingKey(null);
+    if (!res.ok) {
+      setSettingsFlash({ type: 'err', text: res.error });
+      return;
+    }
+    applySettingsDtoToForm(res.data.settings);
+    setSettingsFlash({ type: 'ok', text: 'Platform settings saved.' });
+  };
+
+  const handleSaveInvestmentRules = async () => {
+    setSettingsFlash(null);
+    setSettingsSavingKey('investment');
+    const res = await putJson<{ settings: GlobalSettingsDTO }>(SETTINGS_API, {
+      minInvestment: investmentRules.minInvestment,
+      maxInvestment: investmentRules.maxInvestment,
+      platformFee: investmentRules.platformFee,
+      currency: investmentRules.currency.trim() || 'USD',
+    });
+    setSettingsSavingKey(null);
+    if (!res.ok) {
+      setSettingsFlash({ type: 'err', text: res.error });
+      return;
+    }
+    applySettingsDtoToForm(res.data.settings);
+    setSettingsFlash({ type: 'ok', text: 'Investment rules saved.' });
+  };
+
+  const handleSavePaymentSettings = async () => {
+    setSettingsFlash(null);
+    setSettingsSavingKey('payment');
+    const res = await putJson<{ settings: GlobalSettingsDTO }>(SETTINGS_API, {
+      depositsEnabled: paymentSettings.depositsEnabled,
+      withdrawalsEnabled: paymentSettings.withdrawalsEnabled,
+      transactionFee: paymentSettings.transactionFee,
+    });
+    setSettingsSavingKey(null);
+    if (!res.ok) {
+      setSettingsFlash({ type: 'err', text: res.error });
+      return;
+    }
+    applySettingsDtoToForm(res.data.settings);
+    setSettingsFlash({ type: 'ok', text: 'Payment settings saved.' });
+  };
+
+  const handleSaveNotificationSettings = async () => {
+    setSettingsFlash(null);
+    setSettingsSavingKey('notifications');
+    const res = await putJson<{ settings: GlobalSettingsDTO }>(SETTINGS_API, {
+      emailNotifications: notificationSettings.emailNotifications,
+      investmentEmails: notificationSettings.investmentEmails,
+      adminAlerts: notificationSettings.adminAlerts,
+    });
+    setSettingsSavingKey(null);
+    if (!res.ok) {
+      setSettingsFlash({ type: 'err', text: res.error });
+      return;
+    }
+    applySettingsDtoToForm(res.data.settings);
+    setSettingsFlash({ type: 'ok', text: 'Notification settings saved.' });
+  };
+
+  const handleSaveSecuritySettings = async () => {
+    setSettingsFlash(null);
+    setSettingsSavingKey('security');
+    const res = await putJson<{ settings: GlobalSettingsDTO }>(SETTINGS_API, {
+      twoFactorAuth: securitySettings.twoFactorAuth,
+      sessionTimeout: securitySettings.sessionTimeout,
+    });
+    setSettingsSavingKey(null);
+    if (!res.ok) {
+      setSettingsFlash({ type: 'err', text: res.error });
+      return;
+    }
+    applySettingsDtoToForm(res.data.settings);
+    setSettingsFlash({ type: 'ok', text: 'Security settings saved.' });
   };
 
   const handleAddProject = async () => {
@@ -633,34 +846,51 @@ const [adminProfile, setAdminProfile] = useState({
         {/* Transactions */}
         {activeSection === 'transactions' && (
           <>
-            <h1 className="text-3xl font-bold mb-6">Recent Transactions</h1>
+            <h1 className="text-3xl font-bold mb-6">Platform transactions</h1>
             <Card>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Investor</TableHead>
-                      <TableHead>Project</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recentTransactions.map(t => (
-                      <TableRow key={t.id}>
-                        <TableCell>{t.investor}</TableCell>
-                        <TableCell>{t.project}</TableCell>
-                        <TableCell>{formatCurrency(t.amount)}</TableCell>
-                        <TableCell>{new Date(t.date).toLocaleDateString()}</TableCell>
-                        <TableCell className="flex items-center gap-2">
-                          {t.status==='completed' ? <CheckCircle className="h-4 w-4 text-green-600"/> : <Clock className="h-4 w-4 text-yellow-600"/>}
-                          {t.status==='completed' ? 'Completed':'Pending'}
-                        </TableCell>
+              <CardContent className="pt-6">
+                {adminTransactionsLoading ? (
+                  <p className="text-sm text-slate-500 py-4">Loading transactions…</p>
+                ) : adminTransactionsError ? (
+                  <p className="text-sm text-red-600 py-4">{adminTransactionsError}</p>
+                ) : adminTransactions.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-4">No transactions yet.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Investor</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {adminTransactions.map((t) => (
+                        <TableRow key={t.id}>
+                          <TableCell>
+                            <div className="font-medium">{t.user?.name ?? '—'}</div>
+                            <div className="text-xs text-slate-500">{t.user?.email ?? ''}</div>
+                          </TableCell>
+                          <TableCell>{transactionTypeLabel(t.type)}</TableCell>
+                          <TableCell>{formatCurrency(t.amount)}</TableCell>
+                          <TableCell>{new Date(t.createdAt).toLocaleString()}</TableCell>
+                          <TableCell className="flex items-center gap-2">
+                            {t.status === 'completed' ? (
+                              <CheckCircle className="h-4 w-4 text-green-600 shrink-0" />
+                            ) : t.status === 'failed' ? (
+                              <XCircle className="h-4 w-4 text-red-600 shrink-0" />
+                            ) : (
+                              <Clock className="h-4 w-4 text-yellow-600 shrink-0" />
+                            )}
+                            <span className="capitalize">{t.status}</span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </>
@@ -757,6 +987,26 @@ const [adminProfile, setAdminProfile] = useState({
 <>
 <h1 className="text-3xl font-bold mb-6">Settings</h1>
 
+{settingsPanelLoading && (
+  <p className="text-sm text-slate-500 mb-4">Loading settings from the server…</p>
+)}
+{settingsPanelError && (
+  <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-3 mb-4">
+    {settingsPanelError}
+  </p>
+)}
+{settingsFlash && (
+  <p
+    className={
+      settingsFlash.type === 'ok'
+        ? 'text-sm text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-4 py-3 mb-4'
+        : 'text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-3 mb-4'
+    }
+  >
+    {settingsFlash.text}
+  </p>
+)}
+
 <div className="grid gap-6 lg:grid-cols-2">
 
 {/* Platform Settings */}
@@ -797,8 +1047,12 @@ setPlatformSettings({...platformSettings,contactPhone:e.target.value})
 />
 </div>
 
-<Button className="bg-emerald-600 hover:bg-emerald-700">
-Save Platform Settings
+<Button
+  className="bg-emerald-600 hover:bg-emerald-700"
+  disabled={settingsPanelLoading || settingsSavingKey !== null}
+  onClick={() => void handleSavePlatformSettings()}
+>
+  {settingsSavingKey === 'platform' ? 'Saving…' : 'Save Platform Settings'}
 </Button>
 
 </CardContent>
@@ -856,8 +1110,12 @@ setInvestmentRules({...investmentRules,currency:e.target.value})
 />
 </div>
 
-<Button className="bg-emerald-600 hover:bg-emerald-700">
-Save Investment Rules
+<Button
+  className="bg-emerald-600 hover:bg-emerald-700"
+  disabled={settingsPanelLoading || settingsSavingKey !== null}
+  onClick={() => void handleSaveInvestmentRules()}
+>
+  {settingsSavingKey === 'investment' ? 'Saving…' : 'Save Investment Rules'}
 </Button>
 
 </CardContent>
@@ -905,8 +1163,12 @@ setPaymentSettings({...paymentSettings,transactionFee:Number(e.target.value)})
 />
 </div>
 
-<Button className="bg-emerald-600 hover:bg-emerald-700">
-Save Payment Settings
+<Button
+  className="bg-emerald-600 hover:bg-emerald-700"
+  disabled={settingsPanelLoading || settingsSavingKey !== null}
+  onClick={() => void handleSavePaymentSettings()}
+>
+  {settingsSavingKey === 'payment' ? 'Saving…' : 'Save Payment Settings'}
 </Button>
 
 </CardContent>
@@ -954,8 +1216,12 @@ setNotificationSettings({...notificationSettings,adminAlerts:e.target.checked})
 />
 </div>
 
-<Button className="bg-emerald-600 hover:bg-emerald-700">
-Save Notifications
+<Button
+  className="bg-emerald-600 hover:bg-emerald-700"
+  disabled={settingsPanelLoading || settingsSavingKey !== null}
+  onClick={() => void handleSaveNotificationSettings()}
+>
+  {settingsSavingKey === 'notifications' ? 'Saving…' : 'Save Notifications'}
 </Button>
 
 </CardContent>
@@ -992,8 +1258,12 @@ setSecuritySettings({...securitySettings,sessionTimeout:Number(e.target.value)})
 />
 </div>
 
-<Button className="bg-emerald-600 hover:bg-emerald-700">
-Save Security Settings
+<Button
+  className="bg-emerald-600 hover:bg-emerald-700"
+  disabled={settingsPanelLoading || settingsSavingKey !== null}
+  onClick={() => void handleSaveSecuritySettings()}
+>
+  {settingsSavingKey === 'security' ? 'Saving…' : 'Save Security Settings'}
 </Button>
 
 </CardContent>

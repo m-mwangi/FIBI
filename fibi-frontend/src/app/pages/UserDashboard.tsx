@@ -54,7 +54,7 @@ import {
   Cell,
 } from 'recharts';
 import logo from '../../assets/fibi_logo.svg';
-import { getJson, putJson } from '@/lib/api';
+import { getJson, postJson, putJson } from '@/lib/api';
 import { normalizeApiProject, resolveMediaUrl, type ProjectListResponse } from '@/lib/projects';
 import {
   USERS_PREFIX,
@@ -93,7 +93,35 @@ type InvestmentsResponse = {
   investments: ApiInvestment[];
 };
 
+type ApiTransaction = {
+  id: string;
+  userId: string;
+  amount: number;
+  type: 'DEPOSIT' | 'WITHDRAWAL' | 'INVESTMENT' | 'PAYOUT';
+  status: 'pending' | 'completed' | 'failed';
+  createdAt: string;
+};
+
+type TransactionsResponse = {
+  transactions: ApiTransaction[];
+};
+
 const PIE_COLORS = ['#059669', '#0d9488', '#6366f1', '#d97706', '#64748b'];
+
+function transactionTypeLabel(type: ApiTransaction['type']) {
+  switch (type) {
+    case 'DEPOSIT':
+      return 'Deposit';
+    case 'WITHDRAWAL':
+      return 'Withdrawal';
+    case 'INVESTMENT':
+      return 'Investment';
+    case 'PAYOUT':
+      return 'Payout';
+    default:
+      return type;
+  }
+}
 
 function formatCategory(slug: string) {
   return slug
@@ -106,6 +134,14 @@ export default function UserDashboard() {
   const { user, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawBusy, setWithdrawBusy] = useState(false);
+  const [withdrawError, setWithdrawError] = useState('');
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [depositAmount, setDepositAmount] = useState('');
+  const [depositBusy, setDepositBusy] = useState(false);
+  const [depositError, setDepositError] = useState('');
+  const [depositSuccess, setDepositSuccess] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsProfileLoading, setSettingsProfileLoading] = useState(false);
   const [settingsProfileError, setSettingsProfileError] = useState('');
@@ -127,7 +163,10 @@ export default function UserDashboard() {
   const [investments, setInvestments] = useState<ApiInvestment[]>([]);
   const [isLoadingInvestments, setIsLoadingInvestments] = useState(true);
   const [investmentsError, setInvestmentsError] = useState('');
+  const [walletTransactions, setWalletTransactions] = useState<ApiTransaction[]>([]);
+  const [walletTransactionsError, setWalletTransactionsError] = useState('');
   const [platformProjects, setPlatformProjects] = useState<Project[]>([]);
+  const [supportContactEmail, setSupportContactEmail] = useState('support@fibi.com');
 
   const handleLogout = () => {
     void logout().then(() => navigate('/', { replace: true }));
@@ -139,20 +178,49 @@ export default function UserDashboard() {
     (async () => {
       setIsLoadingInvestments(true);
       setInvestmentsError('');
+      setWalletTransactionsError('');
 
-      const result = await getJson<InvestmentsResponse>('/api/v1/investments');
+      const [invResult, txResult] = await Promise.all([
+        getJson<InvestmentsResponse>('/api/v1/investments'),
+        getJson<TransactionsResponse>('/api/v1/transactions/user'),
+      ]);
       if (cancelled) return;
 
-      if (!result.ok) {
-        setInvestmentsError(result.error || 'Failed to load investments.');
+      if (!invResult.ok) {
+        setInvestmentsError(invResult.error || 'Failed to load investments.');
         setInvestments([]);
       } else {
-        setInvestments(result.data.investments ?? []);
+        setInvestments(invResult.data.investments ?? []);
+      }
+
+      if (!txResult.ok) {
+        setWalletTransactionsError(txResult.error || 'Failed to load wallet activity.');
+        setWalletTransactions([]);
+      } else {
+        setWalletTransactions(txResult.data.transactions ?? []);
       }
 
       setIsLoadingInvestments(false);
     })();
 
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await getJson<{
+        platformName: string;
+        supportEmail: string;
+        contactPhone: string;
+      }>('/api/v1/settings/public');
+      if (cancelled || !res.ok) return;
+      if (res.data.supportEmail) {
+        setSupportContactEmail(res.data.supportEmail);
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -364,6 +432,15 @@ export default function UserDashboard() {
   );
 
   const hasInvestments = userInvestments.length > 0;
+  const hasWalletActivity = walletTransactions.length > 0;
+
+  const reloadWalletTransactions = async () => {
+    const txResult = await getJson<TransactionsResponse>('/api/v1/transactions/user');
+    if (txResult.ok) {
+      setWalletTransactions(txResult.data.transactions ?? []);
+      setWalletTransactionsError('');
+    }
+  };
 
   const statCards = [
     {
@@ -430,23 +507,167 @@ export default function UserDashboard() {
     </>
   );
 
+  const supportFooter = (
+    <p className="text-center text-xs text-slate-400 mt-10 max-w-2xl mx-auto px-4">
+      Need help?{' '}
+      <a href={`mailto:${supportContactEmail}`} className="text-emerald-600 hover:underline">
+        {supportContactEmail}
+      </a>
+    </p>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-emerald-50/40">
-      <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+      <Dialog
+        open={withdrawOpen}
+        onOpenChange={(open) => {
+          setWithdrawOpen(open);
+          if (!open) {
+            setWithdrawAmount('');
+            setWithdrawError('');
+            setWithdrawBusy(false);
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Withdraw earnings</DialogTitle>
+            <DialogTitle>Withdraw funds</DialogTitle>
             <DialogDescription>
-              Withdrawals to your bank or mobile money will be available in a future update. For now,
-              contact support if you need a manual payout.
+              Record a withdrawal request amount. This updates your activity log; bank or mobile payouts
+              are processed separately by the platform.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setWithdrawOpen(false)}>
-              Close
+          <div className="space-y-3 py-2">
+            {withdrawError && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                {withdrawError}
+              </p>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="withdraw-amt">Amount (USD)</Label>
+              <Input
+                id="withdraw-amt"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="0"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                className="rounded-xl border-slate-200"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setWithdrawOpen(false)} disabled={withdrawBusy}>
+              Cancel
             </Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700" asChild>
-              <a href="mailto:support@fibi.com">Email support</a>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700"
+              disabled={withdrawBusy}
+              onClick={async () => {
+                setWithdrawError('');
+                const n = Number(withdrawAmount);
+                if (!Number.isFinite(n) || n <= 0) {
+                  setWithdrawError('Enter a valid positive amount.');
+                  return;
+                }
+                setWithdrawBusy(true);
+                const res = await postJson<{ transaction: ApiTransaction }>('/api/v1/transactions', {
+                  amount: n,
+                  type: 'WITHDRAWAL',
+                });
+                setWithdrawBusy(false);
+                if (!res.ok) {
+                  setWithdrawError(res.error);
+                  return;
+                }
+                setWithdrawOpen(false);
+                setWithdrawAmount('');
+                void reloadWalletTransactions();
+              }}
+            >
+              {withdrawBusy ? 'Submitting…' : 'Submit withdrawal'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={depositOpen}
+        onOpenChange={(open) => {
+          setDepositOpen(open);
+          if (!open) {
+            setDepositAmount('');
+            setDepositError('');
+            setDepositSuccess('');
+            setDepositBusy(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Add funds</DialogTitle>
+            <DialogDescription>
+              Record a deposit to your FIBI wallet. This appears in your activity and the admin
+              transaction list.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {depositError && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                {depositError}
+              </p>
+            )}
+            {depositSuccess && (
+              <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                {depositSuccess}
+              </p>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="deposit-amt">Amount (USD)</Label>
+              <Input
+                id="deposit-amt"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="0"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                className="rounded-xl border-slate-200"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDepositOpen(false)} disabled={depositBusy}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700"
+              disabled={depositBusy}
+              onClick={async () => {
+                setDepositError('');
+                setDepositSuccess('');
+                const n = Number(depositAmount);
+                if (!Number.isFinite(n) || n <= 0) {
+                  setDepositError('Enter a valid positive amount.');
+                  return;
+                }
+                setDepositBusy(true);
+                const res = await postJson<{ transaction: ApiTransaction }>('/api/v1/transactions', {
+                  amount: n,
+                  type: 'DEPOSIT',
+                });
+                setDepositBusy(false);
+                if (!res.ok) {
+                  setDepositError(res.error);
+                  return;
+                }
+                setDepositSuccess('Deposit recorded.');
+                setDepositAmount('');
+                void reloadWalletTransactions();
+              }}
+            >
+              {depositBusy ? 'Submitting…' : 'Add funds'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -720,16 +941,26 @@ export default function UserDashboard() {
             <p className="mt-2 text-emerald-100/95 max-w-xl text-sm sm:text-base">
               Track performance, allocation, payouts, and every project you support—on any device.
             </p>
-            {hasInvestments && (
+            {(hasInvestments || hasWalletActivity) && (
               <div className="mt-6 flex flex-wrap gap-3">
-                <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm backdrop-blur-sm">
-                  <Wallet className="h-4 w-4 shrink-0" />
-                  <span>Net gain {formatCurrency(totalGain)}</span>
-                </div>
-                <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm backdrop-blur-sm">
-                  <Calendar className="h-4 w-4 shrink-0" />
-                  <span>Next payout soon</span>
-                </div>
+                {hasInvestments && (
+                  <>
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm backdrop-blur-sm">
+                      <Wallet className="h-4 w-4 shrink-0" />
+                      <span>Net gain {formatCurrency(totalGain)}</span>
+                    </div>
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm backdrop-blur-sm">
+                      <Calendar className="h-4 w-4 shrink-0" />
+                      <span>Next payout soon</span>
+                    </div>
+                  </>
+                )}
+                {!hasInvestments && hasWalletActivity && (
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm backdrop-blur-sm">
+                    <Wallet className="h-4 w-4 shrink-0" />
+                    <span>Wallet activity on file</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -737,37 +968,128 @@ export default function UserDashboard() {
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 pb-16">
           {isLoadingInvestments ? (
-            <Card className="border-0 shadow-lg rounded-2xl ring-1 ring-slate-100 max-w-lg mx-auto text-center p-10 sm:p-12">
-              <h2 className="text-xl font-semibold text-slate-900">Loading investments...</h2>
-              <p className="text-slate-600 mt-2 text-sm leading-relaxed">
-                Fetching your live portfolio from the backend.
-              </p>
-            </Card>
+            <>
+              <Card className="border-0 shadow-lg rounded-2xl ring-1 ring-slate-100 max-w-lg mx-auto text-center p-10 sm:p-12">
+                <h2 className="text-xl font-semibold text-slate-900">Loading investments...</h2>
+                <p className="text-slate-600 mt-2 text-sm leading-relaxed">
+                  Fetching your live portfolio from the backend.
+                </p>
+              </Card>
+              {supportFooter}
+            </>
           ) : investmentsError ? (
-            <Card className="border-0 shadow-lg rounded-2xl ring-1 ring-slate-100 max-w-lg mx-auto text-center p-10 sm:p-12">
-              <h2 className="text-xl font-semibold text-slate-900">Unable to load investments</h2>
-              <p className="text-red-600 mt-2 text-sm leading-relaxed">{investmentsError}</p>
-              <Button
-                className="mt-8 h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700"
-                onClick={() => window.location.reload()}
-              >
-                Retry
-              </Button>
-            </Card>
-          ) : !hasInvestments ? (
-            <Card className="border-0 shadow-lg rounded-2xl ring-1 ring-slate-100 max-w-lg mx-auto text-center p-10 sm:p-12">
-              <div className="mx-auto w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mb-6">
-                <Briefcase className="h-7 w-7 text-emerald-700" />
+            <>
+              <Card className="border-0 shadow-lg rounded-2xl ring-1 ring-slate-100 max-w-lg mx-auto text-center p-10 sm:p-12">
+                <h2 className="text-xl font-semibold text-slate-900">Unable to load investments</h2>
+                <p className="text-red-600 mt-2 text-sm leading-relaxed">{investmentsError}</p>
+                <Button
+                  className="mt-8 h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                  onClick={() => window.location.reload()}
+                >
+                  Retry
+                </Button>
+              </Card>
+              {supportFooter}
+            </>
+          ) : !hasInvestments && !hasWalletActivity ? (
+            <>
+              <Card className="border-0 shadow-lg rounded-2xl ring-1 ring-slate-100 max-w-lg mx-auto text-center p-10 sm:p-12">
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mb-6">
+                  <Briefcase className="h-7 w-7 text-emerald-700" />
+                </div>
+                <h2 className="text-xl font-semibold text-slate-900">No investments yet</h2>
+                <p className="text-slate-600 mt-2 text-sm leading-relaxed">
+                  Explore vetted land and sustainability projects. When you invest, your portfolio,
+                  charts, and payouts will appear here.
+                </p>
+                <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 rounded-xl border-slate-200"
+                    onClick={() => setDepositOpen(true)}
+                  >
+                    Add funds
+                  </Button>
+                  <Button className="h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700" asChild>
+                    <Link to="/projects">Browse open projects</Link>
+                  </Button>
+                </div>
+              </Card>
+              {supportFooter}
+            </>
+          ) : !hasInvestments && hasWalletActivity ? (
+            <>
+            <div className="max-w-2xl mx-auto space-y-6">
+              {walletTransactionsError && (
+                <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                  {walletTransactionsError}
+                </p>
+              )}
+              <Card className="border-0 shadow-lg rounded-2xl ring-1 ring-slate-100 overflow-hidden">
+                <CardHeader className="border-b border-slate-100 bg-slate-50/50">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-5 w-5 text-emerald-600" />
+                    <CardTitle className="text-lg font-semibold text-slate-900">Wallet activity</CardTitle>
+                  </div>
+                  <p className="text-sm text-slate-500 font-normal">
+                    Deposits, withdrawals, and project investments
+                  </p>
+                </CardHeader>
+                <CardContent className="p-4 sm:p-6 space-y-3">
+                  {walletTransactions.map((tx) => (
+                    <div
+                      key={tx.id}
+                      className="flex flex-wrap items-baseline justify-between gap-2 rounded-xl border border-slate-100 bg-white px-3 py-3 text-sm"
+                    >
+                      <div>
+                        <p className="font-medium text-slate-900">{transactionTypeLabel(tx.type)}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {new Date(tx.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={`font-semibold tabular-nums ${
+                            tx.type === 'WITHDRAWAL' || tx.type === 'INVESTMENT'
+                              ? 'text-red-600'
+                              : 'text-emerald-700'
+                          }`}
+                        >
+                          {tx.type === 'WITHDRAWAL' || tx.type === 'INVESTMENT' ? '−' : '+'}
+                          {formatCurrency(tx.amount)}
+                        </p>
+                        <Badge variant="outline" className="mt-1 capitalize text-xs">
+                          {tx.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button
+                  type="button"
+                  className="h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                  onClick={() => setDepositOpen(true)}
+                >
+                  Add funds
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 rounded-xl border-slate-200"
+                  onClick={() => setWithdrawOpen(true)}
+                >
+                  Withdraw funds
+                </Button>
+                <Button type="button" variant="outline" className="h-11 rounded-xl border-slate-200" asChild>
+                  <Link to="/projects">Browse projects</Link>
+                </Button>
               </div>
-              <h2 className="text-xl font-semibold text-slate-900">No investments yet</h2>
-              <p className="text-slate-600 mt-2 text-sm leading-relaxed">
-                Explore vetted land and sustainability projects. When you invest, your portfolio,
-                charts, and payouts will appear here.
-              </p>
-              <Button className="mt-8 h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700" asChild>
-                <Link to="/projects">Browse open projects</Link>
-              </Button>
-            </Card>
+            </div>
+            {supportFooter}
+            </>
           ) : (
             <>
               <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5 mb-8 sm:mb-10">
@@ -974,6 +1296,57 @@ export default function UserDashboard() {
                     </CardContent>
                   </Card>
 
+                  <Card className="border-0 shadow-md shadow-slate-200/50 rounded-2xl ring-1 ring-slate-100 overflow-hidden">
+                    <CardHeader className="border-b border-slate-100 bg-white pb-3">
+                      <div className="flex items-center gap-2">
+                        <Wallet className="h-5 w-5 text-emerald-600" />
+                        <CardTitle className="text-lg font-semibold">Wallet activity</CardTitle>
+                      </div>
+                      <p className="text-sm text-slate-500 font-normal">Recent movements</p>
+                    </CardHeader>
+                    <CardContent className="pt-4 space-y-3">
+                      {walletTransactionsError && (
+                        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-2 py-2">
+                          {walletTransactionsError}
+                        </p>
+                      )}
+                      {walletTransactions.length === 0 ? (
+                        <p className="text-sm text-slate-500">No transactions yet.</p>
+                      ) : (
+                        walletTransactions.slice(0, 8).map((tx) => {
+                          const out = tx.type === 'WITHDRAWAL' || tx.type === 'INVESTMENT';
+                          return (
+                            <div
+                              key={tx.id}
+                              className="rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-2.5 text-sm"
+                            >
+                              <div className="flex justify-between gap-2">
+                                <span className="font-medium text-slate-800">
+                                  {transactionTypeLabel(tx.type)}
+                                </span>
+                                <span
+                                  className={`font-semibold tabular-nums shrink-0 ${out ? 'text-red-600' : 'text-emerald-700'}`}
+                                >
+                                  {out ? '−' : '+'}
+                                  {formatCurrency(tx.amount)}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-500 mt-1">
+                                {new Date(tx.createdAt).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })}{' '}
+                                ·{' '}
+                                <span className="capitalize">{tx.status}</span>
+                              </p>
+                            </div>
+                          );
+                        })
+                      )}
+                    </CardContent>
+                  </Card>
+
                   <Card className="border-0 shadow-md shadow-slate-200/50 rounded-2xl ring-1 ring-slate-100">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-lg font-semibold">Quick actions</CardTitle>
@@ -988,9 +1361,17 @@ export default function UserDashboard() {
                         type="button"
                         variant="outline"
                         className="w-full h-11 rounded-xl border-slate-200"
+                        onClick={() => setDepositOpen(true)}
+                      >
+                        Add funds
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full h-11 rounded-xl border-slate-200"
                         onClick={() => setWithdrawOpen(true)}
                       >
-                        Withdraw earnings
+                        Withdraw funds
                       </Button>
                       <Button
                         type="button"
@@ -1258,12 +1639,7 @@ export default function UserDashboard() {
                 </Card>
               </section>
 
-              <p className="text-center text-xs text-slate-400 mt-10">
-                Need help?{' '}
-                <a href="mailto:support@fibi.com" className="text-emerald-600 hover:underline">
-                  support@fibi.com
-                </a>
-              </p>
+              {supportFooter}
             </>
           )}
         </div>
