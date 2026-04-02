@@ -9,6 +9,10 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import NotFound from './pages/NotFound';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import MembershipLanding from './pages/MembershipLanding';
+import MembershipApplication from './pages/MembershipApplication';
+import MemberHub from './pages/MemberHub';
+import AdminMembership from './pages/AdminMembership';
 
 export const router = createBrowserRouter([
   {
@@ -18,6 +22,23 @@ export const router = createBrowserRouter([
       { index: true, Component: Home },
       { path: 'projects', Component: Projects },
       { path: 'projects/:id', Component: ProjectDetail },
+      { path: 'membership', Component: MembershipLanding },
+      {
+        path: 'membership/apply',
+        element: (
+          <ProtectedRoute>
+            <MembershipApplication />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'member-hub',
+        element: (
+          <ProtectedRoute requireMembershipTier="basic">
+            <MemberHub />
+          </ProtectedRoute>
+        ),
+      },
 
       // User dashboard route
       {
@@ -35,6 +56,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['admin']}>
             <AdminDashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'admin/memberships',
+        element: (
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminMembership />
           </ProtectedRoute>
         ),
       },

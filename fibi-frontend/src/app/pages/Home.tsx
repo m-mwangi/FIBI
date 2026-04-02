@@ -124,6 +124,15 @@ export default function Home() {
                   </Button>
                 </Link>
               ))}
+            <Link to="/membership">
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-12 px-8 rounded-full border-white/35 bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm"
+              >
+                Join membership
+              </Button>
+            </Link>
           </div>
           <div className="flex justify-center gap-2 mt-14">
             {HERO_IMAGES.map((_, i) => (

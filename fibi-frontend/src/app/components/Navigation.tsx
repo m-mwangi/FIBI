@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router';
-import { LayoutDashboard, FolderOpen, Home, User } from 'lucide-react';
+import { LayoutDashboard, FolderOpen, Home, User, BadgeCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useMembership } from '../context/MembershipContext';
 import { Button } from './ui/button';
 import {
   DropdownMenu,
@@ -18,6 +19,7 @@ export function Navigation() {
   const navigate = useNavigate();
   const isHomePage = location.pathname === '/';
   const { user, logout, isAuthenticated, authReady } = useAuth();
+  const { membership } = useMembership();
 
   const handleLogout = () => {
     void logout().then(() => navigate('/', { replace: true }));
@@ -94,6 +96,21 @@ export function Navigation() {
                 Projects
               </Button>
             </Link>
+            <Link to="/membership">
+              <Button
+                variant="ghost"
+                className={`text-base transition-colors ${
+                  isHomePage
+                    ? scrolled
+                      ? 'text-black hover:bg-black/10'
+                      : 'text-white hover:bg-white/20'
+                    : 'text-white hover:bg-white/20'
+                }`}
+              >
+                <BadgeCheck className="h-4 w-4 mr-2" />
+                Membership
+              </Button>
+            </Link>
 
             {authReady && isAuthenticated && user && (
               <Link to={user.role === 'admin' ? '/admin' : '/dashboard'}>
@@ -140,11 +157,28 @@ export function Navigation() {
                 <DropdownMenuContent align="end" className="w-56 z-[100] bg-white">
                   <DropdownMenuLabel>My Account</DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem className="text-xs text-slate-500 cursor-default focus:bg-transparent">
+                    Membership: {membership.tier.replace('_', ' ')} ({membership.status})
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
                     <Link to={user?.role === 'admin' ? '/admin' : '/dashboard'}>
                       {user?.role === 'admin' ? 'Admin dashboard' : 'Dashboard'}
                     </Link>
                   </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/membership">Membership plans</Link>
+                  </DropdownMenuItem>
+                  {membership.status === 'active' && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/member-hub">Member hub</Link>
+                    </DropdownMenuItem>
+                  )}
+                  {user?.role === 'admin' && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin/memberships">Membership admin</Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={handleLogout}

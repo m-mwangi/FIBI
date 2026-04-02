@@ -20,6 +20,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useMembership } from '../context/MembershipContext';
 import type { Project } from '../data/projects';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -65,6 +66,7 @@ import {
 } from '@/lib/users';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { MEMBERSHIP_PLANS } from '@/lib/membership';
 
 type ApiInvestment = {
   id: string;
@@ -132,6 +134,7 @@ function formatCategory(slug: string) {
 
 export default function UserDashboard() {
   const { user, logout, refreshUser } = useAuth();
+  const { membership, setMembershipTier } = useMembership();
   const navigate = useNavigate();
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
@@ -1391,6 +1394,49 @@ export default function UserDashboard() {
                         <LogOut className="h-4 w-4 mr-2" />
                         Log out
                       </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-0 shadow-md shadow-slate-200/50 rounded-2xl ring-1 ring-slate-100">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg font-semibold">Membership</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <p className="text-sm text-slate-600">
+                        Tier: <span className="font-medium capitalize">{membership.tier.replace('_', ' ')}</span>
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Status: <span className="capitalize">{membership.status}</span> · Application{" "}
+                        <span className="capitalize">{membership.applicationStatus}</span>
+                      </p>
+                      <Button type="button" variant="outline" className="w-full h-10 rounded-xl" asChild>
+                        <Link to="/membership">View plans</Link>
+                      </Button>
+                      <Button type="button" variant="outline" className="w-full h-10 rounded-xl" asChild>
+                        <Link to="/member-hub">Open member hub</Link>
+                      </Button>
+                      {membership.tier !== "investor_plus" && (
+                        <Button
+                          type="button"
+                          className="w-full h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                          onClick={() => setMembershipTier("investor_plus")}
+                        >
+                          Upgrade to Investor+
+                        </Button>
+                      )}
+                      {membership.tier !== "free" && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="w-full h-10 rounded-xl text-slate-600"
+                          onClick={() => setMembershipTier("free")}
+                        >
+                          Downgrade to Free
+                        </Button>
+                      )}
+                      <p className="text-[11px] text-slate-400">
+                        Plans available: {MEMBERSHIP_PLANS.map((plan) => plan.name).join(", ")}
+                      </p>
                     </CardContent>
                   </Card>
                 </div>

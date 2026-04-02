@@ -16,6 +16,7 @@ import {
   Plus,
   Trash2,
   XCircle,
+  BadgeCheck,
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
@@ -387,6 +388,7 @@ const [adminProfile, setAdminProfile] = useState({
     { name: 'Projects', icon: <FolderOpen className="h-4 w-4" />, key: 'projects' },
     { name: 'Transactions', icon: <BarChart className="h-4 w-4" />, key: 'transactions' },
     { name: 'Analytics', icon: <TrendingUp className="h-4 w-4" />, key: 'analytics' },
+    { name: 'Membership', icon: <BadgeCheck className="h-4 w-4" />, key: 'memberships' },
     { name: 'Settings', icon: <Settings className="h-4 w-4" />, key: 'settings' }
   ];
 
@@ -982,6 +984,39 @@ const [adminProfile, setAdminProfile] = useState({
     </Card>
   </>
 )}
+
+        {activeSection === 'memberships' && (
+          <>
+            <h1 className="text-3xl font-bold mb-6">Membership Insights</h1>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+              <StatCard title="Member Growth (30d)" value="+18%" icon={<TrendingUp className="h-4 w-4" />} subtitle="Application-driven growth" />
+              <StatCard title="Retention Rate" value="91%" icon={<Users className="h-4 w-4" />} subtitle="Active paid members" />
+              <StatCard title="Revenue / Member" value="$74" icon={<DollarSign className="h-4 w-4" />} subtitle="Average monthly recurring" />
+              <StatCard title="Engagement Score" value="8.6/10" icon={<Activity className="h-4 w-4" />} subtitle="Events + community actions" />
+            </div>
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Membership Operations</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-slate-600">
+                <p>Review pending applications, approve/reject with feedback, and control tier assignments.</p>
+                <p>Track subscription lifecycle states (active, expired, canceled) and auto-expiry handling.</p>
+                <p>Map platform features to membership tiers for controlled access and monetization.</p>
+                <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => navigate('/admin/memberships')}>
+                  Open Membership Admin Page
+                </Button>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Investor-safe metrics</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-slate-600">
+                This view surfaces growth, retention, and revenue trends without exposing private member-level data.
+              </CardContent>
+            </Card>
+          </>
+        )}
         {/* Settings */}
         {activeSection === 'settings' && (
 <>
