@@ -75,6 +75,20 @@ enum TransactionStatus {
 }
 
 //////////////////////////////////////////////////////
+// PAYMENT ENUMS (STRIPE / OTHER PROVIDERS)
+//////////////////////////////////////////////////////
+
+enum PaymentProvider {
+  STRIPE
+}
+
+enum PaymentStatus {
+  pending
+  succeeded
+  failed
+}
+
+//////////////////////////////////////////////////////
 // USER TABLE
 //////////////////////////////////////////////////////
 
@@ -99,6 +113,8 @@ model User {
   //Relationships
   investments Investment[] //One to many relationship with Investment
   transactions Transaction[] //One to many relationship with Transaction
+  payments Payment[] //One to many relationship with Payment
+  paymentMethods PaymentMethod[] //One to many relationship with PaymentMethod
 }
 
 //////////////////////////////////////////////////////
@@ -129,6 +145,7 @@ model Project {
   timeline Timeline[] //One to many relationship with Timeline phases
   investments Investment[] //One to many relationship with Investment
   projectImages ProjectImage[]
+  payments Payment[] //One to many relationship with Payment
 }
 
 model ProjectImage {
@@ -174,6 +191,7 @@ model Investment {
   //Relationships
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  payments Payment[]
 
   
 }
@@ -189,10 +207,83 @@ model Transaction {
   // ENUMS USED HERE
   type      TransactionType   // deposit, withdrawal, etc.
   status    TransactionStatus @default(pending) //pending, completed, failed
+  // optional reference to a payment that funded this transaction (e.g. INVESTMENT)
+  paymentId String?
   createdAt DateTime @default(now())
 
   //Relationships
   user User @relation(fields: [userId], references: [id], onDelete: Cascade) //One to many relationship with User
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+}
+
+//////////////////////////////////////////////////////
+// PAYMENT TABLES
+//////////////////////////////////////////////////////
+
+model PaymentMethod {
+  id        String          @id @default(uuid())
+  userId    String
+  provider  PaymentProvider
+  methodType String
+  label     String?
+  // Provider-specific details (e.g., card fingerprint, last4, bank name)
+  details   Json?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  //Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments Payment[]
+}
+
+model Payment {
+  id String @id @default(uuid())
+
+  userId String
+  investmentId String?
+  projectId String?
+
+  provider PaymentProvider
+  status PaymentStatus @default(pending)
+
+  amount Float
+  currency String @default("USD")
+
+  // Stripe identifiers (if provider=STRIPE)
+  stripeCheckoutSessionId String?
+  stripePaymentIntentId   String?
+
+  paymentMethodId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  //Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  investment Investment? @relation(fields: [investmentId], references: [id], onDelete: SetNull)
+  // If you want payments linked to projects independent of investments
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  responses PaymentResponse[]
+  transactions Transaction[]
+}
+
+model PaymentResponse {
+  id String @id @default(uuid())
+  paymentId String
+  provider PaymentProvider
+
+  // Stripe event id for idempotency / audit
+  providerEventId String? @unique
+
+  // Provider-specific response payload
+  response Json?
+  status String?
+
+  createdAt DateTime @default(now())
+
+  //Relationships
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 }
 
 

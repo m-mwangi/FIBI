@@ -1,4 +1,5 @@
 const { prisma } = require('../config/db');
+const { createInvestmentCheckoutSession } = require('./stripe.controller');
 
 const createInvestment = async (req, res) => {
     try {
@@ -14,7 +15,10 @@ const createInvestment = async (req, res) => {
             return res.status(400).json({ error: 'Investment amount must be a valid positive number' });
         }
 
-        const { investment } = await prisma.$transaction(async (tx) => {
+        const settings = await prisma.settings.findUnique({ where: { id: 'global' } });
+        const currency = (settings?.currency || 'USD').toUpperCase();
+
+        const { investment, payment, projectRecord } = await prisma.$transaction(async (tx) => {
             const projectRecord = await tx.project.findUnique({ where: { id: projectId } });
             if (!projectRecord) {
                 throw new Error('PROJECT_NOT_FOUND');
@@ -37,51 +41,56 @@ const createInvestment = async (req, res) => {
                 throw new Error(`EXCEEDS_REMAINING:${remainingFunding}`);
             }
 
-            const existingInvestorInProject = await tx.investment.findFirst({
-                where: {
-                    userId,
-                    projectId,
-                },
-                select: { id: true },
-            });
-
             const createdInvestment = await tx.investment.create({
                 data: {
                     userId,
                     projectId,
                     amountInvested: parsedAmount,
-                    currentValue: parsedAmount,
-                    status: 'active',
+                    currentValue: null,
+                    status: 'pending',
                 },
             });
 
-            await tx.transaction.create({
+            const createdPayment = await tx.payment.create({
                 data: {
                     userId,
+                    investmentId: createdInvestment.id,
+                    projectId,
+                    provider: 'STRIPE',
+                    status: 'pending',
                     amount: parsedAmount,
-                    type: 'INVESTMENT',
-                    status: 'completed',
-                },
-            });
-
-            const nextFunding = projectRecord.currentFunding + parsedAmount;
-            const nextStatus = nextFunding >= projectRecord.totalFunding ? 'funded' : projectRecord.status;
-
-            const updatedProject = await tx.project.update({
-                where: { id: projectId },
-                data: {
-                    currentFunding: { increment: parsedAmount },
-                    investorsCount: existingInvestorInProject ? projectRecord.investorsCount : { increment: 1 },
-                    status: nextStatus,
+                    currency,
                 },
             });
 
             return {
                 investment: createdInvestment,
+                payment: createdPayment,
+                projectRecord,
             };
         });
 
-        res.status(201).json({ message: 'Investment created successfully', investment });
+        const checkoutSession = await createInvestmentCheckoutSession({
+            userId,
+            projectId,
+            investmentId: investment.id,
+            paymentId: payment.id,
+            amount: parsedAmount,
+            currency,
+            projectTitle: projectRecord.title,
+        });
+
+        await prisma.payment.update({
+            where: { id: payment.id },
+            data: { stripeCheckoutSessionId: checkoutSession.id },
+        });
+
+        res.status(201).json({
+            message: 'Payment initiated successfully',
+            checkoutUrl: checkoutSession.url,
+            investmentId: investment.id,
+            paymentId: payment.id,
+        });
     } catch (error) {
         if (error.message === 'PROJECT_NOT_FOUND') {
             return res.status(404).json({ error: 'Project not found' });
@@ -107,6 +116,10 @@ const createInvestment = async (req, res) => {
                     ? `Amount exceeds remaining funding. Maximum allowed is ${remaining}`
                     : 'This project is fully funded',
             });
+        }
+
+        if (error.message && error.message.includes('Stripe is not configured')) {
+            return res.status(500).json({ error: error.message });
         }
 
         console.error('Error creating investment:', error);
@@ -162,4 +175,8 @@ const getAllInvestments = async (req, res) => {
     }
 };
 
-module.exports = { createInvestment, getUserInvestments, getAllInvestments };
+module.exports = {
+    createInvestment,
+    getUserInvestments,
+    getAllInvestments,
+};

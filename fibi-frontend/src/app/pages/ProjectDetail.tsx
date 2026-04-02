@@ -173,7 +173,7 @@ export default function ProjectDetail() {
     }
 
     setIsSubmitting(true);
-    const result = await postJson<{ message: string }>('/api/v1/investments', {
+    const result = await postJson<{ message: string; checkoutUrl?: string }>('/api/v1/investments', {
       projectId: project.id,
       amountInvested: amount,
     });
@@ -184,8 +184,15 @@ export default function ProjectDetail() {
       return;
     }
 
-    setSubmitSuccess(result.data.message || 'Investment created successfully.');
+    const { checkoutUrl } = result.data;
+    if (!checkoutUrl) {
+      setSubmitError(result.data.message || 'Unable to initiate payment.');
+      return;
+    }
+
+    setSubmitSuccess(result.data.message || 'Redirecting to payment…');
     setInvestmentAmount('');
+    window.location.href = checkoutUrl;
   };
 
   return (

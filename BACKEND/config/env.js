@@ -9,4 +9,7 @@ module.exports = {
   FRONTEND_URL: process.env.FRONTEND_URL,
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
   APPLE_CLIENT_ID: process.env.APPLE_CLIENT_ID,
+  // Stripe payments for investor investments
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+  STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
 };
