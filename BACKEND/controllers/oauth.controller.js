@@ -2,14 +2,16 @@ const { prisma } = require('../config/db');
 const jwt = require('jsonwebtoken');
 const config = require('../config/env');
 const bcrypt = require('bcryptjs');
+const { getMembershipForAuth } = require('../services/membership.service');
 const { OAuth2Client } = require('google-auth-library');
 const axios = require('axios');
 const appleSigninAuth = require('apple-signin-auth');
 
 const googleClient = new OAuth2Client(config.GOOGLE_CLIENT_ID);
 
-const sendTokenResponse = (user, statusCode, res, message) => {
+const sendTokenResponse = async (user, statusCode, res, message) => {
     const token = jwt.sign({ id: user.id }, config.JWT_SECRET, { expiresIn: config.JWT_EXPIRES_IN });
+    const membershipRow = await getOrCreateUserMembership(user.id);
     const options = {
         expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         httpOnly: true,
@@ -26,7 +28,8 @@ const sendTokenResponse = (user, statusCode, res, message) => {
             name: user.name, 
             email: user.email, 
             role: user.role 
-        } 
+        },
+        membership: membershipPayload,
     });
 };
 
@@ -52,7 +55,7 @@ const handleOAuthLogin = async (provider, providerId, email, name, res, next) =>
         });
 
         if (user) {
-            return sendTokenResponse(user, 200, res, `Logged in with ${provider} successfully`);
+            return await sendTokenResponse(user, 200, res, `Logged in with ${provider} successfully`);
         }
 
         // Create new user
@@ -65,7 +68,7 @@ const handleOAuthLogin = async (provider, providerId, email, name, res, next) =>
             }
         });
 
-        return sendTokenResponse(user, 201, res, `Registered with ${provider} successfully`);
+        return await sendTokenResponse(user, 201, res, `Registered with ${provider} successfully`);
 
     } catch (error) {
         next(error);

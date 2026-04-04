@@ -1,5 +1,19 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useAuth } from "./AuthContext";
+import {
+  getJson,
+  postJson,
+  MEMBERSHIP_PREFIX,
+  type MembershipDto,
+} from "@/lib/api";
 import {
   defaultMembershipProfile,
   getPlanByTier,
@@ -16,136 +30,125 @@ type MembershipApplicationPayload = {
   communityContribution: string;
 };
 
+type MembershipMeResponse = {
+  success: boolean;
+  membership: MembershipDto;
+  latestApplication?: {
+    id: string;
+    status: string;
+    adminFeedback: string | null;
+    createdAt: string;
+  } | null;
+};
+
 type MembershipContextType = {
   membership: MembershipProfile;
+  latestApplication: MembershipMeResponse["latestApplication"];
+  loading: boolean;
+  error: string | null;
+  refreshMembership: () => Promise<void>;
   canAccessTier: (requiredTier: MembershipTier) => boolean;
   canAccessFeature: (feature: MembershipFeatureKey) => boolean;
   applyForMembership: (payload: MembershipApplicationPayload) => Promise<{ success: boolean; error?: string }>;
-  setApplicationStatus: (status: MembershipProfile["applicationStatus"]) => void;
-  setMembershipTier: (tier: MembershipTier) => void;
-  setMembershipStatus: (status: MembershipProfile["status"]) => void;
 };
-
-const STORAGE_PREFIX = "fibi_membership";
 
 const MembershipContext = createContext<MembershipContextType | undefined>(undefined);
 
-function storageKey(userId: string) {
-  return `${STORAGE_PREFIX}_${userId}`;
+function dtoToProfile(d: MembershipDto | null | undefined): MembershipProfile {
+  if (!d) return defaultMembershipProfile();
+  return {
+    tier: d.tier,
+    status: d.status,
+    applicationStatus: d.applicationStatus,
+    renewalDate: d.renewalDate,
+    badgeLabel:
+      d.badgeLabel ??
+      (d.tier === "free" && d.status === "none" ? "Visitor" : "Member"),
+  };
 }
 
 export function MembershipProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, authReady } = useAuth();
+  const [membership, setMembership] = useState<MembershipProfile>(defaultMembershipProfile());
+  const [latestApplication, setLatestApplication] =
+    useState<MembershipMeResponse["latestApplication"]>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [localState, setLocalState] = useState<Record<string, MembershipProfile>>({});
-
-  const userMembership = useMemo(() => {
-    if (!user) return defaultMembershipProfile();
-
-    if (localState[user.id]) return localState[user.id];
-
-    const raw = localStorage.getItem(storageKey(user.id));
-    if (raw) {
-      try {
-        return JSON.parse(raw) as MembershipProfile;
-      } catch {
-        return defaultMembershipProfile();
-      }
+  const refreshMembership = useCallback(async () => {
+    if (!user) {
+      setMembership(defaultMembershipProfile());
+      setLatestApplication(null);
+      setError(null);
+      return;
     }
-
-    // Keep existing investor flows intact by bootstrapping authenticated investors.
-    if (user.role === "investor") {
-      return {
-        tier: "basic",
-        status: "active",
-        applicationStatus: "approved",
-        renewalDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
-        badgeLabel: "Member",
-      };
+    setLoading(true);
+    setError(null);
+    const res = await getJson<MembershipMeResponse>(`${MEMBERSHIP_PREFIX}/me`);
+    setLoading(false);
+    if (!res.ok) {
+      setError(res.error);
+      setMembership(defaultMembershipProfile());
+      return;
     }
+    setMembership(dtoToProfile(res.data.membership));
+    setLatestApplication(res.data.latestApplication ?? null);
+  }, [user]);
 
-    return defaultMembershipProfile();
-  }, [localState, user]);
-
-  const persist = (profile: MembershipProfile) => {
-    if (!user) return;
-    setLocalState((prev) => ({ ...prev, [user.id]: profile }));
-    localStorage.setItem(storageKey(user.id), JSON.stringify(profile));
-  };
+  useEffect(() => {
+    if (!authReady) return;
+    void refreshMembership();
+  }, [authReady, user?.id, refreshMembership]);
 
   const canAccessTier = (requiredTier: MembershipTier) =>
-    isMembershipActive(userMembership) && hasTierAccess(userMembership.tier, requiredTier);
+    isMembershipActive(membership) && hasTierAccess(membership.tier, requiredTier);
 
   const canAccessFeature = (feature: MembershipFeatureKey) => {
-    if (!isMembershipActive(userMembership)) return false;
-    const plan = getPlanByTier(userMembership.tier);
+    if (!isMembershipActive(membership)) return false;
+    const plan = getPlanByTier(membership.tier);
     return plan.features.includes(feature);
   };
 
   const applyForMembership = async (payload: MembershipApplicationPayload) => {
     if (!user) return { success: false, error: "Please log in to apply." };
-    if (!payload.motivation.trim() || !payload.interests.trim() || !payload.communityContribution.trim()) {
+    if (
+      !payload.motivation.trim() ||
+      !payload.interests.trim() ||
+      !payload.communityContribution.trim()
+    ) {
       return { success: false, error: "Please complete all application fields." };
     }
-
-    persist({
-      ...userMembership,
-      applicationStatus: "pending",
-      badgeLabel: "Applicant",
-    });
+    const res = await postJson<{
+      success: boolean;
+      membership?: MembershipDto;
+      error?: string;
+    }>(`${MEMBERSHIP_PREFIX}/apply`, payload);
+    if (!res.ok) {
+      return { success: false, error: res.error };
+    }
+    if (res.data.membership) {
+      setMembership(dtoToProfile(res.data.membership));
+    } else {
+      await refreshMembership();
+    }
     return { success: true };
   };
 
-  const setApplicationStatus = (status: MembershipProfile["applicationStatus"]) => {
-    const updated: MembershipProfile = {
-      ...userMembership,
-      applicationStatus: status,
-      badgeLabel:
-        status === "approved"
-          ? "Member"
-          : status === "pending"
-            ? "Applicant"
-            : userMembership.badgeLabel,
-    };
-    persist(updated);
-  };
-
-  const setMembershipTier = (tier: MembershipTier) => {
-    const updated: MembershipProfile = {
-      ...userMembership,
-      tier,
-      status: tier === "free" ? "none" : "active",
-      applicationStatus: tier === "free" ? userMembership.applicationStatus : "approved",
-      renewalDate:
-        tier === "free" ? null : new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
-      badgeLabel: tier === "free" ? "Visitor" : "Member",
-    };
-    persist(updated);
-  };
-
-  const setMembershipStatus = (status: MembershipProfile["status"]) => {
-    persist({
-      ...userMembership,
-      status,
-      badgeLabel: status === "active" ? "Member" : userMembership.badgeLabel,
-    });
-  };
-
-  return (
-    <MembershipContext.Provider
-      value={{
-        membership: userMembership,
-        canAccessTier,
-        canAccessFeature,
-        applyForMembership,
-        setApplicationStatus,
-        setMembershipTier,
-        setMembershipStatus,
-      }}
-    >
-      {children}
-    </MembershipContext.Provider>
+  const value = useMemo(
+    () => ({
+      membership,
+      latestApplication,
+      loading,
+      error,
+      refreshMembership,
+      canAccessTier,
+      canAccessFeature,
+      applyForMembership,
+    }),
+    [membership, latestApplication, loading, error, refreshMembership]
   );
+
+  return <MembershipContext.Provider value={value}>{children}</MembershipContext.Provider>;
 }
 
 export function useMembership() {

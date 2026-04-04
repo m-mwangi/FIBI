@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const config = require('../config/env');
 const { prisma } = require('../config/db');
+const { getMembershipForAuth } = require('../services/membership.service');
 
 const secret = config.JWT_SECRET;
 const expiresIn = config.JWT_EXPIRES_IN;
@@ -56,7 +57,7 @@ async function createRegisteredUser(body, role) {
     return { user };
 }
 
-const sendTokenResponse = (user, statusCode, res, message) => {
+const sendTokenResponse = async (user, statusCode, res, message) => {
     if (!secret) {
         return res.status(500).json({
             success: false,
@@ -65,6 +66,7 @@ const sendTokenResponse = (user, statusCode, res, message) => {
     }
 
     const token = jwt.sign({ id: user.id }, secret, { expiresIn });
+    const membershipPayload = await getMembershipForAuth(user.id);
 
     const options = {
         maxAge: jwtExpiresToMs(expiresIn),
@@ -88,6 +90,7 @@ const sendTokenResponse = (user, statusCode, res, message) => {
             email: user.email,
             role: user.role,
         },
+        membership: membershipPayload,
     });
 };
 
@@ -97,7 +100,7 @@ const registerUser = async (req, res, next) => {
         if (result.error) {
             return res.status(result.error.status).json(result.error.body);
         }
-        sendTokenResponse(result.user, 201, res, "User registered successfully");
+        await sendTokenResponse(result.user, 201, res, "User registered successfully");
     } catch (error) {
         next(error);
     }
@@ -164,7 +167,7 @@ const loginUser = async (req, res, next) => {
         }
 
         // Send token response
-        sendTokenResponse(user, 200, res, 'User logged in successfully');
+        await sendTokenResponse(user, 200, res, 'User logged in successfully');
     } catch (error) {
         next(error);
     }
@@ -172,6 +175,7 @@ const loginUser = async (req, res, next) => {
 
 const getMe = async (req, res, next) => {
     try {
+        const membershipPayload = await getMembershipForAuth(req.user.id);
         res.status(200).json({
             success: true,
             user: {
@@ -180,6 +184,7 @@ const getMe = async (req, res, next) => {
                 email: req.user.email,
                 role: req.user.role,
             },
+            membership: membershipPayload,
         });
     } catch (error) {
         next(error);

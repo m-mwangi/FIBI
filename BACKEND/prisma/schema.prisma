@@ -89,6 +89,31 @@ enum PaymentStatus {
 }
 
 //////////////////////////////////////////////////////
+// MEMBERSHIP ENUMS
+//////////////////////////////////////////////////////
+
+enum MembershipTier {
+  free
+  basic
+  premium
+  investor_plus
+}
+
+enum MembershipSubscriptionStatus {
+  none
+  active
+  expired
+  canceled
+}
+
+enum MembershipApplicationReviewStatus {
+  none
+  pending
+  approved
+  rejected
+}
+
+//////////////////////////////////////////////////////
 // USER TABLE
 //////////////////////////////////////////////////////
 
@@ -115,6 +140,10 @@ model User {
   transactions Transaction[] //One to many relationship with Transaction
   payments Payment[] //One to many relationship with Payment
   paymentMethods PaymentMethod[] //One to many relationship with PaymentMethod
+  membership                 UserMembership?
+  membershipApplications     MembershipApplication[]
+  reviewedMembershipApplications MembershipApplication[] @relation("MembershipApplicationReviewer")
+  memberEventRegistrations   MemberEventRegistration[]
 }
 
 //////////////////////////////////////////////////////
@@ -309,4 +338,91 @@ model Settings {
   twoFactorAuth        Boolean  @default(false)
   sessionTimeout       Int      @default(30)
   updatedAt            DateTime @updatedAt
+}
+
+//////////////////////////////////////////////////////
+// MEMBERSHIP (tiers, applications, plans, events)
+//////////////////////////////////////////////////////
+
+model UserMembership {
+  id                  String                         @id @default(uuid())
+  userId              String                         @unique
+  tier                MembershipTier                 @default(free)
+  status              MembershipSubscriptionStatus   @default(none)
+  applicationStatus   MembershipApplicationReviewStatus @default(none)
+  renewalDate         DateTime?
+  badgeLabel          String?
+  createdAt           DateTime                       @default(now())
+  updatedAt           DateTime                       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MembershipApplication {
+  id                    String                            @id @default(uuid())
+  userId                String
+  motivation            String
+  interests             String
+  communityContribution String
+  status                MembershipApplicationReviewStatus @default(pending)
+  adminFeedback         String?
+  reviewedById          String?
+  reviewedAt            DateTime?
+  createdAt             DateTime                          @default(now())
+  updatedAt             DateTime                          @updatedAt
+
+  user       User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("MembershipApplicationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+}
+
+model MembershipPlan {
+  id           String           @id @default(uuid())
+  tier         MembershipTier   @unique
+  name         String
+  monthlyPrice Float
+  description  String
+  features     Json             @default("[]")
+  active       Boolean          @default(true)
+  sortOrder    Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+}
+
+model MembershipFeatureAccess {
+  featureKey String           @id
+  minTier    MembershipTier
+  updatedAt  DateTime         @updatedAt
+}
+
+model MemberEvent {
+  id          String           @id @default(uuid())
+  title       String
+  description String?
+  startsAt    DateTime
+  endsAt      DateTime?
+  location    String?
+  minTier     MembershipTier   @default(basic)
+  capacity    Int?
+  imageUrl    String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  registrations MemberEventRegistration[]
+}
+
+model MemberEventRegistration {
+  id        String   @id @default(uuid())
+  eventId   String
+  userId    String
+  status    String   @default("confirmed")
+  createdAt DateTime @default(now())
+
+  event MemberEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId])
 }

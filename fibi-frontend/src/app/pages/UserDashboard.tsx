@@ -134,7 +134,7 @@ function formatCategory(slug: string) {
 
 export default function UserDashboard() {
   const { user, logout, refreshUser } = useAuth();
-  const { membership, setMembershipTier } = useMembership();
+  const { membership, refreshMembership } = useMembership();
   const navigate = useNavigate();
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
@@ -1415,25 +1415,14 @@ export default function UserDashboard() {
                       <Button type="button" variant="outline" className="w-full h-10 rounded-xl" asChild>
                         <Link to="/member-hub">Open member hub</Link>
                       </Button>
-                      {membership.tier !== "investor_plus" && (
-                        <Button
-                          type="button"
-                          className="w-full h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700"
-                          onClick={() => setMembershipTier("investor_plus")}
-                        >
-                          Upgrade to Investor+
-                        </Button>
-                      )}
-                      {membership.tier !== "free" && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="w-full h-10 rounded-xl text-slate-600"
-                          onClick={() => setMembershipTier("free")}
-                        >
-                          Downgrade to Free
-                        </Button>
-                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full h-10 rounded-xl"
+                        onClick={() => void refreshMembership()}
+                      >
+                        Refresh status
+                      </Button>
                       <p className="text-[11px] text-slate-400">
                         Plans available: {MEMBERSHIP_PLANS.map((plan) => plan.name).join(", ")}
                       </p>

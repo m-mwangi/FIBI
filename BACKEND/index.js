@@ -19,6 +19,7 @@ const paymentRoutes = require('./routes/payment.routes');
 const paymentMethodsRoutes = require('./routes/payment-methods.routes');
 const paymentResponsesRoutes = require('./routes/payment-responses.routes');
 const stripeRoutes = require('./routes/stripe.routes');
+const membershipRoutes = require('./routes/membership.routes');
 
 const app = express();
 
@@ -72,6 +73,7 @@ app.use('/api/v1/payment-methods', paymentMethodsRoutes);
 app.use('/api/v1/payment-responses', paymentResponsesRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/stripe', stripeRoutes);
+app.use('/api/v1/membership', membershipRoutes);
 
 // Error Handler Middleware
 app.use(errorHandler);
