@@ -90,9 +90,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
 
       if (!me.ok) {
-        localStorage.removeItem(STORAGE_USER);
-        localStorage.removeItem(STORAGE_TOKEN);
-        setUser(null);
+        const fatal =
+          me.status === 401 || me.status === 403 || me.status === 404;
+        if (fatal) {
+          localStorage.removeItem(STORAGE_USER);
+          localStorage.removeItem(STORAGE_TOKEN);
+          setUser(null);
+        } else {
+          const raw = localStorage.getItem(STORAGE_USER);
+          if (raw) {
+            try {
+              setUser(JSON.parse(raw) as User);
+            } catch {
+              setUser(null);
+            }
+          } else {
+            setUser(null);
+          }
+        }
       } else {
         const u = me.data.user;
         const normalized: User = {

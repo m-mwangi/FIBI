@@ -10,8 +10,14 @@ const appleSigninAuth = require('apple-signin-auth');
 const googleClient = new OAuth2Client(config.GOOGLE_CLIENT_ID);
 
 const sendTokenResponse = async (user, statusCode, res, message) => {
+    if (!config.JWT_SECRET) {
+        return res.status(500).json({
+            success: false,
+            error: 'Server misconfiguration: JWT_SECRET is not set',
+        });
+    }
     const token = jwt.sign({ id: user.id }, config.JWT_SECRET, { expiresIn: config.JWT_EXPIRES_IN });
-    const membershipRow = await getOrCreateUserMembership(user.id);
+    const membership = await getMembershipForAuth(user.id);
     const options = {
         expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         httpOnly: true,
@@ -29,7 +35,7 @@ const sendTokenResponse = async (user, statusCode, res, message) => {
             email: user.email, 
             role: user.role 
         },
-        membership: membershipPayload,
+        membership,
     });
 };
 
@@ -97,7 +103,7 @@ const googleAuth = async (req, res, next) => {
                 Authorization: `Bearer ${accessToken}`,
             },
         });
-        await handleOAuthLogin('GOOGLE', data.sub, data.email, data.name, res, next);
+        return await handleOAuthLogin('GOOGLE', data.sub, data.email, data.name, res, next);
     } catch (error) {
         res.status(401).json({ success: false, error: 'Invalid Google Token' });
     }

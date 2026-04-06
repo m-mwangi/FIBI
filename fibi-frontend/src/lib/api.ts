@@ -43,11 +43,37 @@ function readErrorMessage(data: Record<string, unknown>): string {
   return "Request failed";
 }
 
+type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; error: string };
+
+/** Maps fetch rejection (e.g. ERR_CONNECTION_REFUSED) to a result so callers never get an uncaught promise. */
+function networkFailureResult(e: unknown): { ok: false; status: number; error: string } {
+  if (e instanceof TypeError) {
+    return {
+      ok: false,
+      status: 0,
+      error:
+        "Cannot reach the API. Start the BACKEND server and ensure VITE_API_URL matches its URL (e.g. http://localhost:5000).",
+    };
+  }
+  if (e instanceof Error) {
+    return { ok: false, status: 0, error: e.message };
+  }
+  return { ok: false, status: 0, error: "Network error" };
+}
+
+async function jsonBodyResult<T>(res: Response): Promise<ApiResult<T>> {
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    return { ok: false, status: res.status, error: readErrorMessage(data) };
+  }
+  return { ok: true, data: data as T };
+}
+
 export async function postJson<T>(
   path: string,
   body: unknown,
   init?: { token?: string | null }
-): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -57,26 +83,23 @@ export async function postJson<T>(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    credentials: "include",
-  });
-
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-
-  if (!res.ok) {
-    return { ok: false, status: res.status, error: readErrorMessage(data) };
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      credentials: "include",
+    });
+    return jsonBodyResult<T>(res);
+  } catch (e) {
+    return networkFailureResult(e);
   }
-
-  return { ok: true, data: data as T };
 }
 
 export async function getJson<T>(
   path: string,
   init?: { token?: string | null }
-): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {};
   const token =
     init?.token === undefined ? localStorage.getItem("fibi_token") : init.token;
@@ -84,26 +107,23 @@ export async function getJson<T>(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "GET",
-    headers,
-    credentials: "include",
-  });
-
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-
-  if (!res.ok) {
-    return { ok: false, status: res.status, error: readErrorMessage(data) };
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: "GET",
+      headers,
+      credentials: "include",
+    });
+    return jsonBodyResult<T>(res);
+  } catch (e) {
+    return networkFailureResult(e);
   }
-
-  return { ok: true, data: data as T };
 }
 
 export async function patchJson<T>(
   path: string,
   body: unknown,
   init?: { token?: string | null }
-): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -113,27 +133,24 @@ export async function patchJson<T>(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "PATCH",
-    headers,
-    body: JSON.stringify(body),
-    credentials: "include",
-  });
-
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-
-  if (!res.ok) {
-    return { ok: false, status: res.status, error: readErrorMessage(data) };
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(body),
+      credentials: "include",
+    });
+    return jsonBodyResult<T>(res);
+  } catch (e) {
+    return networkFailureResult(e);
   }
-
-  return { ok: true, data: data as T };
 }
 
 export async function putJson<T>(
   path: string,
   body: unknown,
   init?: { token?: string | null }
-): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -143,26 +160,23 @@ export async function putJson<T>(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "PUT",
-    headers,
-    body: JSON.stringify(body),
-    credentials: "include",
-  });
-
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-
-  if (!res.ok) {
-    return { ok: false, status: res.status, error: readErrorMessage(data) };
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(body),
+      credentials: "include",
+    });
+    return jsonBodyResult<T>(res);
+  } catch (e) {
+    return networkFailureResult(e);
   }
-
-  return { ok: true, data: data as T };
 }
 
 export async function deleteJson<T>(
   path: string,
   init?: { token?: string | null }
-): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {};
   const token =
     init?.token === undefined ? localStorage.getItem("fibi_token") : init.token;
@@ -170,26 +184,23 @@ export async function deleteJson<T>(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "DELETE",
-    headers,
-    credentials: "include",
-  });
-
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-
-  if (!res.ok) {
-    return { ok: false, status: res.status, error: readErrorMessage(data) };
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: "DELETE",
+      headers,
+      credentials: "include",
+    });
+    return jsonBodyResult<T>(res);
+  } catch (e) {
+    return networkFailureResult(e);
   }
-
-  return { ok: true, data: data as T };
 }
 
 export async function postFormData<T>(
   path: string,
   formData: FormData,
   init?: { token?: string | null }
-): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {};
   const token =
     init?.token === undefined ? localStorage.getItem("fibi_token") : init.token;
@@ -197,27 +208,24 @@ export async function postFormData<T>(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers,
-    body: formData,
-    credentials: "include",
-  });
-
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-
-  if (!res.ok) {
-    return { ok: false, status: res.status, error: readErrorMessage(data) };
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers,
+      body: formData,
+      credentials: "include",
+    });
+    return jsonBodyResult<T>(res);
+  } catch (e) {
+    return networkFailureResult(e);
   }
-
-  return { ok: true, data: data as T };
 }
 
 export async function putFormData<T>(
   path: string,
   formData: FormData,
   init?: { token?: string | null }
-): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {};
   const token =
     init?.token === undefined ? localStorage.getItem("fibi_token") : init.token;
@@ -225,18 +233,15 @@ export async function putFormData<T>(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "PUT",
-    headers,
-    body: formData,
-    credentials: "include",
-  });
-
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-
-  if (!res.ok) {
-    return { ok: false, status: res.status, error: readErrorMessage(data) };
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: "PUT",
+      headers,
+      body: formData,
+      credentials: "include",
+    });
+    return jsonBodyResult<T>(res);
+  } catch (e) {
+    return networkFailureResult(e);
   }
-
-  return { ok: true, data: data as T };
 }
