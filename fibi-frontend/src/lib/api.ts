@@ -1,4 +1,9 @@
-const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
+/** Empty string = same-origin (e.g. nginx proxies `/api` to the backend). */
+const rawApiUrl = import.meta.env.VITE_API_URL;
+const API_BASE = (rawApiUrl === undefined || rawApiUrl === null
+  ? "http://localhost:5000"
+  : String(rawApiUrl)
+).replace(/\/$/, "");
 
 export const AUTH_PREFIX = "/api/v1/auth";
 
