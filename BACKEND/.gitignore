@@ -3,6 +3,11 @@
 .env.*
 *.env
 *.env.*
+<<<<<<< HEAD
+=======
+!.env.example
+!*.env.example
+>>>>>>> 97927744d141edf6b8043212c58984d38945be53
 
 !.env.example
 !*.env.example
