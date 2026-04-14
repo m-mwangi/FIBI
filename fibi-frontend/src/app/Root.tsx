@@ -10,7 +10,8 @@ export default function Root() {
       location.pathname !== '/projects') ||
     location.pathname === '/login' ||
     location.pathname === '/signup' ||
-    location.pathname.startsWith('/admin'); // ✅ add this line
+    location.pathname.startsWith('/admin') ||
+    location.pathname === '/dashboard';
 
   return (
     <div className="flex flex-col min-h-screen">

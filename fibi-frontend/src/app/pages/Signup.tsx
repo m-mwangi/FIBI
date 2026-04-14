@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
-
-import { Card, CardContent } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
 import { Alert, AlertDescription } from '../components/ui/alert';
-
-import { AlertCircle } from 'lucide-react';
+import { Separator } from '../components/ui/separator';
+import { AlertCircle, Leaf, Eye, EyeOff } from 'lucide-react';
 import logo from '../../assets/fibi_logo.svg';
+import { startOAuth, type OAuthProvider } from '@/lib/socialOAuth';
 
 export default function Signup() {
   const [name, setName] = useState('');
@@ -22,8 +22,10 @@ export default function Signup() {
   const [idNumber, setIdNumber] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const { signup } = useAuth();
+  const { signup, oauthLogin } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,11 +43,19 @@ export default function Signup() {
 
     setIsLoading(true);
     try {
-      const success = await signup(name, email, password);
-      if (success) {
+      const result = await signup({
+        name,
+        email,
+        password,
+        dob: dob || undefined,
+        country: country || undefined,
+        idType,
+        idNumber: idNumber || undefined,
+      });
+      if (result.success) {
         navigate('/dashboard', { replace: true });
       } else {
-        setError('An account with this email already exists');
+        setError(result.error);
       }
     } catch {
       setError('An error occurred. Please try again.');
@@ -54,147 +64,247 @@ export default function Signup() {
     }
   };
 
+  const handleOAuthSignup = async (provider: OAuthProvider) => {
+    setError('');
+    setIsLoading(true);
+    try {
+      const payload = await startOAuth(provider);
+      const result = await oauthLogin(provider, payload);
+      if (result.success) {
+        navigate('/dashboard', { replace: true });
+      } else {
+        setError(result.error);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'OAuth signup failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const inputClass = 'h-10 rounded-xl border-slate-200';
+  const selectClass =
+    'flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 px-4 py-12">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
+    <div className="relative min-h-screen py-10 sm:py-14 px-4">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-100/70 via-white to-teal-100/50" />
+      <div className="pointer-events-none absolute left-1/4 top-0 h-64 w-64 -translate-x-1/2 rounded-full bg-emerald-200/25 blur-3xl" />
+
+      <div className="relative mx-auto w-full max-w-2xl">
+        <div className="mb-8 text-center">
           <Link to="/" className="inline-block">
-            <img src={logo} alt="FIBI Logo" className="mx-auto h-37 w-auto" />
+            <img src={logo} alt="FIBI" className="mx-auto h-50 sm:h-51 w-auto" />
           </Link>
-          <p className="text-gray-500 mt-2 text-sm">Create your investor account</p>
+          <p className="mt-3 flex items-center justify-center gap-2 text-sm text-slate-600">
+            <Leaf className="h-4 w-4 text-emerald-600" />
+            Investor registration
+          </p>
         </div>
 
-        <Card className="shadow-xl border-0">
-          <CardContent className="p-8">
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <Card className="border-0 shadow-2xl shadow-emerald-900/10 ring-1 ring-slate-100 rounded-2xl overflow-hidden bg-white/95 backdrop-blur-sm">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
+            <CardTitle className="text-xl text-slate-900">Create your account</CardTitle>
+            <CardDescription>Join FIBI to browse and invest in vetted projects.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6 sm:p-8">
+            <form onSubmit={handleSubmit} className="space-y-6">
               {error && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" className="rounded-xl">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
 
-              <div className="space-y-3">
-                <Label>Full Name</Label>
-                <Input
-                  type="text"
-                  placeholder="John Doe"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div className="space-y-3">
-                <Label>Email Address</Label>
-                <Input
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <Label>Date of Birth</Label>
-                  <Input
-                    type="date"
-                    value={dob}
-                    onChange={(e) => setDob(e.target.value)}
-                    required
-                    disabled={isLoading}
-                  />
-                </div>
-                <div className="space-y-3">
-                  <Label>Country</Label>
-                  <Input
-                    type="text"
-                    placeholder="Kenya"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    required
-                    disabled={isLoading}
-                  />
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Profile</h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="su-name">Full name</Label>
+                    <Input
+                      id="su-name"
+                      type="text"
+                      placeholder="John Doe"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                      disabled={isLoading}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="su-email">Email</Label>
+                    <Input
+                      id="su-email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      disabled={isLoading}
+                      className={inputClass}
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <Label>ID Type</Label>
-                  <select
-                    value={idType}
-                    onChange={(e) => setIdType(e.target.value)}
-                    className="w-full border rounded-md p-2 bg-white"
-                    disabled={isLoading}
-                  >
-                    <option value="passport">Passport</option>
-                    <option value="national-id">National ID</option>
-                    <option value="drivers-license">Driver's License</option>
-                  </select>
-                </div>
-                <div className="space-y-3">
-                  <Label>ID Number</Label>
-                  <Input
-                    type="text"
-                    placeholder="Document number"
-                    value={idNumber}
-                    onChange={(e) => setIdNumber(e.target.value)}
-                    required
-                    disabled={isLoading}
-                  />
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Identity</h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="su-dob">Date of birth</Label>
+                    <Input
+                      id="su-dob"
+                      type="date"
+                      value={dob}
+                      onChange={(e) => setDob(e.target.value)}
+                      required
+                      disabled={isLoading}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="su-country">Country</Label>
+                    <Input
+                      id="su-country"
+                      type="text"
+                      placeholder="Kenya"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      required
+                      disabled={isLoading}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="su-idtype">ID type</Label>
+                    <select
+                      id="su-idtype"
+                      value={idType}
+                      onChange={(e) => setIdType(e.target.value)}
+                      className={selectClass}
+                      disabled={isLoading}
+                    >
+                      <option value="passport">Passport</option>
+                      <option value="national-id">National ID</option>
+                      <option value="drivers-license">Driver&apos;s license</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="su-idnum">ID number</Label>
+                    <Input
+                      id="su-idnum"
+                      type="text"
+                      placeholder="Document number"
+                      value={idNumber}
+                      onChange={(e) => setIdNumber(e.target.value)}
+                      required
+                      disabled={isLoading}
+                      className={inputClass}
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <Label>Password</Label>
-                <Input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div className="space-y-3">
-                <Label>Confirm Password</Label>
-                <Input
-                  type="password"
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  disabled={isLoading}
-                />
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Security</h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="su-pass">Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="su-pass"
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        disabled={isLoading}
+                        autoComplete="new-password"
+                        className={`${inputClass} pr-11`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        disabled={isLoading}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:pointer-events-none disabled:opacity-50"
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="su-pass2">Confirm password</Label>
+                    <div className="relative">
+                      <Input
+                        id="su-pass2"
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        placeholder="••••••••"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        autoComplete="new-password"
+                        className={`${inputClass} pr-11`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword((v) => !v)}
+                        disabled={isLoading}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:pointer-events-none disabled:opacity-50"
+                        aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <Button
                 type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-11"
+                className="h-11 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-base font-semibold shadow-md"
                 disabled={isLoading}
               >
-                {isLoading ? 'Creating account...' : 'Create Account'}
+                {isLoading ? 'Creating account…' : 'Create account'}
               </Button>
 
-              <div className="text-center text-sm text-gray-600">
-                Already have an account?{' '}
-                <Link
-                  to="/login"
-                  className="text-emerald-600 font-medium hover:text-emerald-700"
-                >
-                  Log in
-                </Link>
+              <div className="relative py-1">
+                <Separator />
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-xs text-slate-500">
+                  or sign up with
+                </span>
               </div>
+
+              <div className="grid gap-2">
+                <Button type="button" variant="outline" className="h-10 rounded-xl" disabled={isLoading} onClick={() => handleOAuthSignup('google')}>
+                  Continue with Google
+                </Button>
+                <Button type="button" variant="outline" className="h-10 rounded-xl" disabled={isLoading} onClick={() => handleOAuthSignup('facebook')}>
+                  Continue with Facebook
+                </Button>
+                <Button type="button" variant="outline" className="h-10 rounded-xl" disabled={isLoading} onClick={() => handleOAuthSignup('apple')}>
+                  Continue with Apple
+                </Button>
+              </div>
+
+              <p className="text-center text-sm text-slate-600">
+                Already registered?{' '}
+                <Link to="/login" className="font-semibold text-emerald-600 hover:underline">
+                  Sign in
+                </Link>
+              </p>
             </form>
           </CardContent>
         </Card>
+
+        <p className="mt-6 text-center">
+          <Link to="/" className="text-sm font-medium text-slate-600 hover:text-emerald-700">
+            ← Back to home
+          </Link>
+        </p>
       </div>
     </div>
   );

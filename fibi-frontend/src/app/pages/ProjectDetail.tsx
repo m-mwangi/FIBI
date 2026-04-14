@@ -1,7 +1,19 @@
-import { useState } from 'react';
-import { useParams, Link } from 'react-router';
-import { ArrowLeft, MapPin, TrendingUp, CheckCircle2, Circle, ChevronLeft, ChevronRight } from 'lucide-react';
-import { projects } from '../data/projects';
+import { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router';
+import {
+  ArrowLeft,
+  MapPin,
+  TrendingUp,
+  CheckCircle2,
+  Circle,
+  ChevronLeft,
+  ChevronRight,
+  Home,
+  Calendar,
+  Users,
+  Loader2,
+} from 'lucide-react';
+import type { Project } from '../data/projects';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -9,178 +21,315 @@ import { Progress } from '../components/ui/progress';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Separator } from '../components/ui/separator';
+import { getJson, postJson } from '@/lib/api';
+import { normalizeApiProject, type ProjectOneResponse } from '@/lib/projects';
+import { useAuth } from '../context/AuthContext';
 
 export default function ProjectDetail() {
   const { id } = useParams();
-  const project = projects.find(p => p.id === id);
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const [project, setProject] = useState<Project | null>(null);
+  const [loadState, setLoadState] = useState<'loading' | 'error' | 'ready'>('loading');
+  const [loadError, setLoadError] = useState('');
   const [investmentAmount, setInvestmentAmount] = useState('');
-
   const [currentImage, setCurrentImage] = useState(0);
-  const images = project?.images || (project ? [project.imageUrl] : []);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [submitSuccess, setSubmitSuccess] = useState('');
 
-  if (!project) {
+  useEffect(() => {
+    if (!id) {
+      setProject(null);
+      setLoadState('error');
+      setLoadError('Missing project id.');
+      return;
+    }
+    let cancelled = false;
+    setLoadState('loading');
+    setLoadError('');
+    setCurrentImage(0);
+    (async () => {
+      const result = await getJson<ProjectOneResponse>(`/api/v1/projects/${id}`);
+      if (cancelled) return;
+      if (!result.ok) {
+        setProject(null);
+        setLoadState('error');
+        setLoadError(result.error || 'Project not found.');
+        return;
+      }
+      setProject(normalizeApiProject(result.data.project));
+      setLoadState('ready');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const images = project?.images?.length
+    ? project.images
+    : project
+      ? [project.imageUrl]
+      : [];
+
+  if (loadState === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl mb-4 text-gray-900">Project not found</h2>
+      <div className="min-h-[70vh] flex flex-col items-center justify-center px-4 bg-gradient-to-b from-slate-50 to-emerald-50/30 gap-3">
+        <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
+        <p className="text-sm text-slate-600">Loading project…</p>
+      </div>
+    );
+  }
+
+  if (!project || loadState === 'error') {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center px-4 bg-gradient-to-b from-slate-50 to-emerald-50/30">
+        <div className="rounded-3xl bg-white p-10 text-center shadow-xl ring-1 ring-slate-100 max-w-md">
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Project not found</h2>
+          <p className="text-slate-600 mb-6 text-sm">
+            {loadError || 'This listing may have moved. Browse all opportunities.'}
+          </p>
           <Link to="/projects">
-            <Button variant="outline">Back to Projects</Button>
+            <Button className="rounded-xl bg-emerald-600 hover:bg-emerald-700">Back to projects</Button>
           </Link>
         </div>
       </div>
     );
   }
 
-  const fundingPercentage = (project.currentFunding / project.totalFunding) * 100;
-  const remainingFunding = project.totalFunding - project.currentFunding;
+  const fundingPct =
+    project.totalFunding > 0
+      ? Math.min(100, (project.currentFunding / project.totalFunding) * 100)
+      : 0;
+  const remaining = project.totalFunding - project.currentFunding;
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
-  };
 
-  const getCategoryLabel = (category: string) => {
-    const labels: Record<string, string> = {
-      'eco-lodge': 'Eco Lodge',
-      'solar-roof': 'Solar Roof',
-      'agriculture': 'Agriculture',
-    };
-    return labels[category] || category;
-  };
+  const categoryLabel = (category: string) =>
+    ({ 'eco-lodge': 'Eco lodge', 'solar-roof': 'Solar roof', agriculture: 'Agriculture' } as Record<
+      string,
+      string
+    >)[category] || category;
 
-  const getStatusIcon = (status: 'completed' | 'in-progress' | 'upcoming') => {
+  const statusIcon = (status: 'completed' | 'in-progress' | 'upcoming') => {
     switch (status) {
       case 'completed':
-        return <CheckCircle2 className="h-5 w-5 text-green-600" />;
+        return <CheckCircle2 className="h-5 w-5 text-emerald-600" />;
       case 'in-progress':
-        return <Circle className="h-5 w-5 text-blue-600 fill-blue-600" />;
-      case 'upcoming':
-        return <Circle className="h-5 w-5 text-gray-300" />;
+        return <Circle className="h-5 w-5 fill-teal-500 text-teal-600" />;
+      default:
+        return <Circle className="h-5 w-5 text-slate-300" />;
     }
   };
 
-  const calculateProjectedReturn = () => {
-    const amount = parseFloat(investmentAmount);
-    if (isNaN(amount) || amount <= 0) return 0;
-    return amount * (project.projectedROI / 100);
+  const projectedReturn = () => {
+    const a = parseFloat(investmentAmount);
+    if (Number.isNaN(a) || a <= 0) return 0;
+    return a * (project.projectedROI / 100);
+  };
+
+  const statusBadge =
+    project.status === 'open'
+      ? 'bg-emerald-500 text-white border-0'
+      : project.status === 'funded'
+        ? 'bg-sky-600 text-white border-0'
+        : project.status === 'closed'
+          ? 'bg-slate-600 text-white border-0'
+          : 'bg-violet-600 text-white border-0';
+
+  const statusHeadline =
+    project.status === 'open'
+      ? 'Open'
+      : project.status === 'funded'
+        ? 'Funded'
+        : project.status === 'closed'
+          ? 'Closed'
+          : 'Active';
+
+  const handleInvest = async () => {
+    setSubmitError('');
+    setSubmitSuccess('');
+
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    const amount = Number(investmentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setSubmitError('Enter a valid investment amount.');
+      return;
+    }
+
+    if (amount < project.minInvestment) {
+      setSubmitError(`Minimum investment is ${formatCurrency(project.minInvestment)}.`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    const result = await postJson<{ message: string; checkoutUrl?: string }>('/api/v1/investments', {
+      projectId: project.id,
+      amountInvested: amount,
+    });
+    setIsSubmitting(false);
+
+    if (!result.ok) {
+      setSubmitError(result.error || 'Unable to complete investment.');
+      return;
+    }
+
+    const { checkoutUrl } = result.data;
+    if (!checkoutUrl) {
+      setSubmitError(result.data.message || 'Unable to initiate payment.');
+      return;
+    }
+
+    setSubmitSuccess(result.data.message || 'Redirecting to payment…');
+    setInvestmentAmount('');
+    window.location.href = checkoutUrl;
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 relative">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Back Button */}
-            <Link
-              to="/projects"
-              className="inline-flex items-center gap-1 font-medium text-sm bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-full shadow-lg transition duration-200 z-50"
-            >
-              <ArrowLeft size={16} />
-              Back to Projects
-            </Link>
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-emerald-50/25">
+      <div className="border-b border-slate-100 bg-white/80 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+          <Link to="/" className="hover:text-emerald-700 flex items-center gap-1">
+            <Home className="h-4 w-4" />
+            Home
+          </Link>
+          <ChevronRight className="h-4 w-4 text-slate-300" />
+          <Link to="/projects" className="hover:text-emerald-700">
+            Projects
+          </Link>
+          <ChevronRight className="h-4 w-4 text-slate-300" />
+          <span className="text-slate-900 font-medium truncate max-w-[200px] sm:max-w-md">{project.title}</span>
+        </div>
+      </div>
 
-            {/* Hero Image Carousel */}
-            <div className="relative h-96 rounded-lg overflow-hidden mt-2">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+        <Link
+          to="/projects"
+          className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 hover:text-emerald-800 mb-6"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          All projects
+        </Link>
+
+        <div className="grid gap-8 lg:grid-cols-3 lg:gap-10">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="relative aspect-[16/10] sm:h-[min(480px,55vh)] overflow-hidden rounded-3xl bg-slate-100 shadow-xl ring-1 ring-slate-200/80">
               <img
                 src={images[currentImage]}
-                alt={`${project.title} image ${currentImage + 1}`}
-                className="w-full h-full object-cover transition-opacity duration-300"
+                alt=""
+                className="h-full w-full object-cover"
               />
-
-              {/* Left Chevron */}
               {images.length > 1 && (
-                <button
-                  onClick={() =>
-                    setCurrentImage(prev => (prev === 0 ? images.length - 1 : prev - 1))
-                  }
-                  className="absolute top-1/2 -translate-y-1/2 left-4 bg-black/30 hover:bg-black/50 text-white p-3 rounded-full shadow-md z-20 transition"
-                >
-                  <ChevronLeft size={24} />
-                </button>
-              )}
-
-              {/* Right Chevron */}
-              {images.length > 1 && (
-                <button
-                  onClick={() => setCurrentImage((prev) => (prev + 1) % images.length)}
-                  className="absolute top-1/2 -translate-y-1/2 right-4 bg-black/30 hover:bg-black/50 text-white p-3 rounded-full shadow-md z-20 transition"
-                >
-                  <ChevronRight size={24} />
-                </button>
-              )}
-
-              {/* Pagination Dots */}
-              {images.length > 1 && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2 z-20">
-                  {images.map((_, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setCurrentImage(idx)}
-                      className={`h-2 w-2 rounded-full transition-colors ${
-                        currentImage === idx ? 'bg-emerald-600' : 'bg-white/60'
-                      }`}
-                    />
-                  ))}
-                </div>
+                <>
+                  <button
+                    type="button"
+                    aria-label="Previous image"
+                    onClick={() => setCurrentImage((p) => (p === 0 ? images.length - 1 : p - 1))}
+                    className="absolute left-4 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/45 p-3 text-white backdrop-blur-sm hover:bg-black/60"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Next image"
+                    onClick={() => setCurrentImage((p) => (p + 1) % images.length)}
+                    className="absolute right-4 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/45 p-3 text-white backdrop-blur-sm hover:bg-black/60"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                  <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-2">
+                    {images.map((_, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        aria-label={`Image ${idx + 1}`}
+                        onClick={() => setCurrentImage(idx)}
+                        className={`h-2 rounded-full transition-all ${
+                          currentImage === idx ? 'w-7 bg-emerald-400' : 'w-2 bg-white/50'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
 
-            {/* Project Info */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <CardTitle className="text-3xl mb-2">{project.title}</CardTitle>
-                    <div className="flex items-center text-gray-600">
-                      <MapPin className="h-4 w-4 mr-1" />
-                      {project.location}
+            <Card className="border-0 rounded-2xl shadow-lg shadow-slate-200/40 ring-1 ring-slate-100">
+              <CardHeader className="space-y-4 pb-2">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      <Badge className={statusBadge}>{statusHeadline}</Badge>
+                      <Badge variant="outline" className="capitalize border-slate-200 text-slate-700">
+                        {categoryLabel(project.category)}
+                      </Badge>
+                    </div>
+                    <CardTitle className="text-2xl sm:text-3xl font-bold leading-tight text-slate-900">
+                      {project.title}
+                    </CardTitle>
+                    <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-600">
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-4 w-4 text-emerald-600" />
+                        {project.location}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Users className="h-4 w-4 text-slate-400" />
+                        {project.investors} investors
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4 text-slate-400" />
+                        Deadline {new Date(project.fundingDeadline).toLocaleDateString()}
+                      </span>
                     </div>
                   </div>
-                  <Badge variant="secondary" className="text-sm">
-                    {getCategoryLabel(project.category)}
-                  </Badge>
                 </div>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-700 leading-relaxed">{project.description}</p>
+                <p className="leading-relaxed text-slate-700">{project.description}</p>
               </CardContent>
             </Card>
 
-            {/* Key Features */}
-            <Card>
+            <Card className="border-0 rounded-2xl shadow-lg shadow-slate-200/40 ring-1 ring-slate-100">
               <CardHeader>
-                <CardTitle>Key Features</CardTitle>
+                <CardTitle className="text-lg font-semibold">Key features</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-3">
-                  {project.features.map((feature, index) => (
-                    <li key={index} className="flex items-start">
-                      <CheckCircle2 className="h-5 w-5 text-emerald-600 mr-3 mt-0.5 flex-shrink-0" />
-                      <span className="text-gray-700">{feature}</span>
+                  {project.features.map((feature, i) => (
+                    <li key={i} className="flex gap-3">
+                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+                      <span className="text-slate-700">{feature}</span>
                     </li>
                   ))}
                 </ul>
               </CardContent>
             </Card>
 
-            {/* Project Timeline */}
-            <Card>
+            <Card className="border-0 rounded-2xl shadow-lg shadow-slate-200/40 ring-1 ring-slate-100">
               <CardHeader>
-                <CardTitle>Development Timeline</CardTitle>
+                <CardTitle className="text-lg font-semibold">Development timeline</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-6">
+                <div className="relative space-y-0 pl-2">
+                  <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-emerald-100" aria-hidden />
                   {project.timeline.map((phase, index) => (
-                    <div key={index} className="flex items-start gap-4">
-                      <div className="flex-shrink-0">{getStatusIcon(phase.status)}</div>
-                      <div className="flex-1">
-                        <h4 className="text-gray-900 mb-1">{phase.phase}</h4>
-                        <p className="text-sm text-gray-600 capitalize">{phase.status.replace('-', ' ')}</p>
+                    <div key={index} className="relative flex gap-4 pb-8 last:pb-0">
+                      <div className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white ring-2 ring-emerald-100">
+                        {statusIcon(phase.status)}
+                      </div>
+                      <div className="min-w-0 pt-0.5">
+                        <h4 className="font-semibold text-slate-900">{phase.phase}</h4>
+                        <p className="text-sm capitalize text-slate-500">{phase.status.replace('-', ' ')}</p>
                       </div>
                     </div>
                   ))}
@@ -189,94 +338,97 @@ export default function ProjectDetail() {
             </Card>
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Investment Card */}
-            <Card className="sticky top-6">
-              <CardHeader>
-                <CardTitle>Investment Details</CardTitle>
+          <div>
+            <Card className="sticky top-6 border-0 rounded-2xl shadow-xl shadow-slate-200/50 ring-1 ring-slate-100 overflow-hidden">
+              <div className="bg-gradient-to-br from-emerald-600 to-teal-700 px-5 py-4 text-white">
+                <p className="text-xs font-medium uppercase tracking-wider text-emerald-100">Invest</p>
+                <p className="mt-1 text-2xl font-bold">{formatCurrency(project.minInvestment)} min</p>
+              </div>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-semibold text-slate-900">Deal terms</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
-                {/* ROI */}
+              <CardContent className="space-y-5">
+                <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+                  <span className="flex items-center gap-2 text-sm text-slate-600">
+                    <TrendingUp className="h-4 w-4 text-emerald-600" />
+                    Projected ROI
+                  </span>
+                  <span className="text-xl font-bold text-emerald-600">{project.projectedROI}%</span>
+                </div>
+                <p className="text-sm text-slate-600">
+                  Payouts: <span className="font-medium text-slate-900">{project.payoutFrequency}</span>
+                </p>
+
+                <Separator />
+
                 <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center text-gray-600">
-                      <TrendingUp className="h-5 w-5 mr-2" />
-                      Projected Annual ROI
-                    </div>
-                    <div className="text-2xl text-emerald-600">{project.projectedROI}%</div>
+                  <div className="mb-2 flex justify-between text-sm">
+                    <span className="text-slate-600">Funding</span>
+                    <span className="font-semibold tabular-nums">{fundingPct.toFixed(0)}%</span>
                   </div>
-                  <div className="text-sm text-gray-600">
-                    Payout Frequency: <span className="text-gray-900">{project.payoutFrequency}</span>
+                  <Progress
+                    value={fundingPct}
+                    className="h-2.5 bg-slate-100 [&>[data-slot=progress-indicator]]:bg-emerald-600"
+                  />
+                  <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-slate-500">Raised</p>
+                      <p className="font-semibold text-slate-900">{formatCurrency(project.currentFunding)}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500">Remaining</p>
+                      <p className="font-semibold text-slate-900">{formatCurrency(remaining)}</p>
+                    </div>
                   </div>
                 </div>
 
                 <Separator />
 
-                {/* Funding Progress */}
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-gray-700">Funding Progress</span>
-                    <span className="text-gray-900">{fundingPercentage.toFixed(0)}%</span>
-                  </div>
-                  <Progress value={fundingPercentage} className="h-3 mb-2" />
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <div className="text-gray-600">Raised</div>
-                      <div className="text-gray-900">{formatCurrency(project.currentFunding)}</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-600">Remaining</div>
-                      <div className="text-gray-900">{formatCurrency(remainingFunding)}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Investment Calculator */}
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="investment">Investment Amount</Label>
-                    <Input
-                      id="investment"
-                      type="number"
-                      placeholder={`Min. ${formatCurrency(project.minInvestment)}`}
-                      value={investmentAmount}
-                      onChange={e => setInvestmentAmount(e.target.value)}
-                      className="mt-1"
-                      min={project.minInvestment}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Minimum investment: {formatCurrency(project.minInvestment)}
-                    </p>
-                  </div>
+                <div className="space-y-3">
+                  <Label htmlFor="investment" className="text-slate-700">
+                    Investment amount (USD)
+                  </Label>
+                  <Input
+                    id="investment"
+                    type="number"
+                    placeholder={`Min. ${formatCurrency(project.minInvestment)}`}
+                    value={investmentAmount}
+                    onChange={(e) => setInvestmentAmount(e.target.value)}
+                    className="rounded-xl border-slate-200"
+                    min={project.minInvestment}
+                  />
+                  <p className="text-xs text-slate-500">Minimum {formatCurrency(project.minInvestment)}</p>
 
                   {investmentAmount && parseFloat(investmentAmount) >= project.minInvestment && (
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                      <div className="text-sm text-gray-600 mb-1">Projected Annual Return</div>
-                      <div className="text-2xl text-emerald-600">
-                        {formatCurrency(calculateProjectedReturn())}
-                      </div>
-                      <div className="text-xs text-gray-600 mt-1">
-                        Based on {project.projectedROI}% ROI
-                      </div>
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4">
+                      <p className="text-xs font-medium text-emerald-800 uppercase tracking-wide">
+                        Est. annual return
+                      </p>
+                      <p className="text-2xl font-bold text-emerald-700">{formatCurrency(projectedReturn())}</p>
+                      <p className="mt-1 text-xs text-slate-600">Based on {project.projectedROI}% ROI (illustrative)</p>
                     </div>
                   )}
 
                   {project.status === 'open' ? (
-                    <Button className="w-full bg-emerald-600 hover:bg-emerald-700" size="lg">
-                      Invest Now
+                    <Button
+                      className="h-12 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-base"
+                      onClick={() => void handleInvest()}
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? 'Processing...' : 'Invest now'}
                     </Button>
                   ) : (
-                    <Button className="w-full" size="lg" disabled>
-                      {project.status === 'funded' ? 'Fully Funded' : 'Not Available'}
+                    <Button className="h-12 w-full rounded-xl" size="lg" disabled variant="secondary">
+                      {project.status === 'funded'
+                        ? 'Fully funded'
+                        : project.status === 'closed'
+                          ? 'Closed'
+                          : 'Unavailable'}
                     </Button>
                   )}
-
-                  <p className="text-xs text-gray-500 text-center">
-                    Investments are subject to terms and conditions
-                  </p>
+                  {submitError && <p className="text-center text-xs text-red-600">{submitError}</p>}
+                  {submitSuccess && <p className="text-center text-xs text-emerald-700">{submitSuccess}</p>}
+                  <p className="text-center text-[11px] text-slate-400">Subject to terms and eligibility.</p>
                 </div>
               </CardContent>
             </Card>

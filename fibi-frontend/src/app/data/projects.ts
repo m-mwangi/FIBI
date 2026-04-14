@@ -16,7 +16,7 @@ export interface Project {
   features: string[];
   imageUrl: string;
   images?: string[]; // Added array for multiple images
-  status: 'open' | 'funded' | 'active';
+  status: 'open' | 'funded' | 'active' | 'closed';
   timeline: { phase: string; status: 'completed' | 'in-progress' | 'upcoming' }[];
 }
 

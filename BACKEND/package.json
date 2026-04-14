@@ -1,0 +1,43 @@
+{
+  "name": "fibi",
+  "version": "1.0.0",
+  "description": "This is a backend project for development systems",
+  "license": "MIT",
+  "author": "Omwansa Arnold",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postinstall": "prisma generate",
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "create-admin": "node scripts/create-admin.js",
+    "seed:projects": "node prisma/seed-projects.js"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.6.0",
+    "@prisma/client": "^7.6.0",
+    "apple-signin-auth": "^2.0.0",
+    "axios": "^1.14.0",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "google-auth-library": "^10.6.2",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.0.2",
+    "pg": "^8.20.0",
+    "stripe": "^21.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/pg": "^8.20.0",
+    "dotenv": "^17.3.1",
+    "nodemon": "^3.1.14",
+    "prisma": "^7.6.0"
+  },
+  "prisma": {
+    "seed": "node prisma/seed-projects.js"
+  }
+}

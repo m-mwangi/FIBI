@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Navigate } from 'react-router';
+import { useState, useEffect, useCallback } from 'react';
+import { Navigate, useNavigate } from 'react-router';
 import {
   Users,
   DollarSign,
@@ -14,11 +14,26 @@ import {
   Settings,
   LogOut,
   Plus,
-  Trash2
+  Trash2,
+  XCircle,
+  BadgeCheck,
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
-import { projects as projectsData } from '../data/projects';
+import type { Project } from '../data/projects';
+import { getJson, putJson, deleteJson, postFormData, putFormData } from '@/lib/api';
+import {
+  normalizeApiProject,
+  type ProjectListResponse,
+  type ProjectCreateResponse,
+  type ProjectUpdateResponse,
+} from '@/lib/projects';
+import {
+  USERS_PREFIX,
+  userGrowthSeriesFromCount,
+  type UsersListResponse,
+  type UserListEntry,
+} from '@/lib/users';
 import logo from '../../assets/logo.svg';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -45,13 +60,41 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend
-} from 'recharts';import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+} from 'recharts';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
+const SETTINGS_API = '/api/v1/settings';
+
+type GlobalSettingsDTO = {
+  id: string;
+  platformName: string;
+  supportEmail: string;
+  contactPhone: string;
+  minInvestment: number;
+  maxInvestment: number;
+  platformFee: number;
+  currency: string;
+  depositsEnabled: boolean;
+  withdrawalsEnabled: boolean;
+  transactionFee: number;
+  emailNotifications: boolean;
+  investmentEmails: boolean;
+  adminAlerts: boolean;
+  twoFactorAuth: boolean;
+  sessionTimeout: number;
+};
+
 export default function AdminDashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    void logout().then(() => navigate('/', { replace: true }));
+  };
   const [activeSection, setActiveSection] = useState('dashboard');
   const [platformSettings, setPlatformSettings] = useState({
   platformName: "FIBI",
@@ -87,33 +130,207 @@ const [adminProfile, setAdminProfile] = useState({
   name: "Admin",
   email: "admin@fibi.com",
 });
+  const [adminProfileSaving, setAdminProfileSaving] = useState(false);
+  const [adminProfileMsg, setAdminProfileMsg] = useState('');
+  const [adminProfileErr, setAdminProfileErr] = useState('');
+  const [adminPwCurrent, setAdminPwCurrent] = useState('');
+  const [adminPwNew, setAdminPwNew] = useState('');
+  const [adminPwConfirm, setAdminPwConfirm] = useState('');
+  const [adminPwBusy, setAdminPwBusy] = useState(false);
+  const [adminPwErr, setAdminPwErr] = useState('');
+  const [adminPwMsg, setAdminPwMsg] = useState('');
 
-  if (!user) return null;
-  if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
+  const [adminUsers, setAdminUsers] = useState<UserListEntry[]>([]);
+  const [adminUsersLoading, setAdminUsersLoading] = useState(false);
+  const [adminUsersError, setAdminUsersError] = useState('');
+  const [isDeleteUserModalOpen, setIsDeleteUserModalOpen] = useState(false);
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const [deleteUserBusy, setDeleteUserBusy] = useState(false);
 
-  const [projects, setProjects] = useState(projectsData);
+  function defaultFundingDeadline(): string {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().slice(0, 10);
+  }
 
-  // Add Project modal
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState('');
+  const [adminBusy, setAdminBusy] = useState(false);
+  const [adminFormError, setAdminFormError] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newProject, setNewProject] = useState({
     title: '',
     category: '',
     location: '',
+    minInvestment: 100,
     totalFunding: 0,
     currentFunding: 0,
     investors: 0,
+    projectedROI: 10,
+    payoutFrequency: 'Quarterly',
+    fundingDeadline: defaultFundingDeadline(),
+    description: '',
+    featuresText: '',
     status: 'open',
   });
-
-  // Delete Project modal
+  const [addCoverFile, setAddCoverFile] = useState<File | null>(null);
+  const [addGalleryFiles, setAddGalleryFiles] = useState<File[]>([]);
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-
-  // Project Details modal (editable)
-  const [selectedProject, setSelectedProject] = useState<typeof projectsData[0] | null>(null);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [editCoverFile, setEditCoverFile] = useState<File | null>(null);
+  const [editGalleryFiles, setEditGalleryFiles] = useState<File[]>([]);
 
-  const totalUsers = 1247;
+  type AdminTransactionRow = {
+    id: string;
+    userId: string;
+    amount: number;
+    type: 'DEPOSIT' | 'WITHDRAWAL' | 'INVESTMENT' | 'PAYOUT';
+    status: 'pending' | 'completed' | 'failed';
+    createdAt: string;
+    user: { name: string; email: string };
+  };
+
+  const [adminTransactions, setAdminTransactions] = useState<AdminTransactionRow[]>([]);
+  const [adminTransactionsLoading, setAdminTransactionsLoading] = useState(false);
+  const [adminTransactionsError, setAdminTransactionsError] = useState('');
+
+  const [settingsPanelLoading, setSettingsPanelLoading] = useState(false);
+  const [settingsPanelError, setSettingsPanelError] = useState('');
+  const [settingsSavingKey, setSettingsSavingKey] = useState<string | null>(null);
+  const [settingsFlash, setSettingsFlash] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  const applySettingsDtoToForm = useCallback((s: GlobalSettingsDTO) => {
+    setPlatformSettings({
+      platformName: s.platformName,
+      supportEmail: s.supportEmail,
+      contactPhone: s.contactPhone,
+    });
+    setInvestmentRules({
+      minInvestment: s.minInvestment,
+      maxInvestment: s.maxInvestment,
+      platformFee: s.platformFee,
+      currency: s.currency,
+    });
+    setPaymentSettings({
+      depositsEnabled: s.depositsEnabled,
+      withdrawalsEnabled: s.withdrawalsEnabled,
+      transactionFee: s.transactionFee,
+    });
+    setNotificationSettings({
+      emailNotifications: s.emailNotifications,
+      investmentEmails: s.investmentEmails,
+      adminAlerts: s.adminAlerts,
+    });
+    setSecuritySettings({
+      twoFactorAuth: s.twoFactorAuth,
+      sessionTimeout: s.sessionTimeout,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!user || user.role !== 'admin') return;
+    let cancelled = false;
+    (async () => {
+      setProjectsLoading(true);
+      setProjectsError('');
+      const res = await getJson<ProjectListResponse>('/api/v1/projects');
+      if (cancelled) return;
+      if (!res.ok) {
+        setProjectsError(res.error || 'Failed to load projects.');
+        setProjects([]);
+      } else {
+        setProjects((res.data.projects ?? []).map(normalizeApiProject));
+      }
+      setProjectsLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'admin') return;
+    let cancelled = false;
+    (async () => {
+      setAdminUsersLoading(true);
+      setAdminUsersError('');
+      const res = await getJson<UsersListResponse>(USERS_PREFIX);
+      if (cancelled) return;
+      setAdminUsersLoading(false);
+      if (!res.ok) {
+        setAdminUsersError(res.error || 'Failed to load users.');
+        setAdminUsers([]);
+      } else {
+        setAdminUsers(res.data.data ?? []);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'admin' || activeSection !== 'transactions') return;
+    let cancelled = false;
+    (async () => {
+      setAdminTransactionsLoading(true);
+      setAdminTransactionsError('');
+      const res = await getJson<{ transactions: AdminTransactionRow[] }>(
+        '/api/v1/transactions/all'
+      );
+      if (cancelled) return;
+      setAdminTransactionsLoading(false);
+      if (!res.ok) {
+        setAdminTransactionsError(res.error || 'Failed to load transactions.');
+        setAdminTransactions([]);
+      } else {
+        setAdminTransactions(res.data.transactions ?? []);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, activeSection]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'admin' || activeSection !== 'settings') return;
+    let cancelled = false;
+    (async () => {
+      setSettingsPanelLoading(true);
+      setSettingsPanelError('');
+      setSettingsFlash(null);
+      const res = await getJson<{ settings: GlobalSettingsDTO }>(SETTINGS_API);
+      if (cancelled) return;
+      setSettingsPanelLoading(false);
+      if (!res.ok) {
+        setSettingsPanelError(res.error || 'Failed to load settings.');
+        return;
+      }
+      applySettingsDtoToForm(res.data.settings);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, activeSection, applySettingsDtoToForm]);
+
+  useEffect(() => {
+    if (activeSection !== 'settings') {
+      setSettingsFlash(null);
+    }
+  }, [activeSection]);
+
+  useEffect(() => {
+    if (!user) return;
+    setAdminProfile({ name: user.name, email: user.email });
+  }, [user]);
+
+  if (!user) return null;
+  if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
+
+  const totalUsers = adminUsers.length;
   const totalInvested = projects.reduce((sum, p) => sum + p.currentFunding, 0);
   const activeProjects = projects.filter(p => p.status === 'open').length;
   const platformRevenue = totalInvested * 0.02;
@@ -122,24 +339,22 @@ const [adminProfile, setAdminProfile] = useState({
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
 
-  const kenyanNames = ['Mwangi Kamau','Achieng Odhiambo','Juma Wanyama','Njeri Wambui','Otieno Odongo','Wanjiku Mwikali'];
-  const recentTransactions = projects.map((project, index) => ({
-    id: (index + 1).toString(),
-    investor: kenyanNames[index % kenyanNames.length],
-    project: project.title,
-    amount: Math.floor(Math.random() * 15000) + 1000,
-    date: new Date(Date.now() - index * 86400000).toISOString(),
-    status: index % 2 === 0 ? 'completed' : 'pending'
-  }));
+  const transactionTypeLabel = (t: AdminTransactionRow['type']) => {
+    switch (t) {
+      case 'DEPOSIT':
+        return 'Deposit';
+      case 'WITHDRAWAL':
+        return 'Withdrawal';
+      case 'INVESTMENT':
+        return 'Investment';
+      case 'PAYOUT':
+        return 'Payout';
+      default:
+        return t;
+    }
+  };
 
-  const userGrowthData = [
-    { month: 'Oct 25', users: 820 },
-    { month: 'Nov 25', users: 935 },
-    { month: 'Dec 25', users: 1042 },
-    { month: 'Jan 26', users: 1128 },
-    { month: 'Feb 26', users: 1189 },
-    { month: 'Mar 26', users: 1247 }
-  ];
+  const userGrowthData = userGrowthSeriesFromCount(totalUsers);
   const investmentGrowthData = [
     { month: 'Oct 25', amount: 25000 },
     { month: 'Nov 25', amount: 42000 },
@@ -169,40 +384,263 @@ const [adminProfile, setAdminProfile] = useState({
 
   const sidebarItems = [
     { name: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4" />, key: 'dashboard' },
+    { name: 'Users', icon: <Users className="h-4 w-4" />, key: 'users' },
     { name: 'Projects', icon: <FolderOpen className="h-4 w-4" />, key: 'projects' },
     { name: 'Transactions', icon: <BarChart className="h-4 w-4" />, key: 'transactions' },
     { name: 'Analytics', icon: <TrendingUp className="h-4 w-4" />, key: 'analytics' },
+    { name: 'Membership', icon: <BadgeCheck className="h-4 w-4" />, key: 'memberships' },
     { name: 'Settings', icon: <Settings className="h-4 w-4" />, key: 'settings' }
   ];
 
   const handleInputChange = (field: string, value: string | number) => {
-    setNewProject(prev => ({ ...prev, [field]: value }));
+    setNewProject((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleAddProject = () => {
-    const projectToAdd = { ...newProject, id: (projects.length + 1).toString() };
-    setProjects([projectToAdd, ...projects]);
-    setIsAddModalOpen(false);
-    setNewProject({ title: '', category: '', location: '', totalFunding: 0, currentFunding: 0, investors: 0, status: 'open' });
+  const resetAddForm = () => {
+    setNewProject({
+      title: '',
+      category: '',
+      location: '',
+      minInvestment: 100,
+      totalFunding: 0,
+      currentFunding: 0,
+      investors: 0,
+      projectedROI: 10,
+      payoutFrequency: 'Quarterly',
+      fundingDeadline: defaultFundingDeadline(),
+      description: '',
+      featuresText: '',
+      status: 'open',
+    });
+    setAddCoverFile(null);
+    setAddGalleryFiles([]);
   };
 
-  const handleDeleteProject = () => {
-    if (deleteProjectId) {
-      setProjects(projects.filter(p => p.id !== deleteProjectId));
-      setDeleteProjectId(null);
-      setIsDeleteModalOpen(false);
+  const handleSavePlatformSettings = async () => {
+    setSettingsFlash(null);
+    if (!platformSettings.platformName.trim()) {
+      setSettingsFlash({ type: 'err', text: 'Platform name is required.' });
+      return;
     }
+    setSettingsSavingKey('platform');
+    const res = await putJson<{ settings: GlobalSettingsDTO }>(SETTINGS_API, {
+      platformName: platformSettings.platformName.trim(),
+      supportEmail: platformSettings.supportEmail.trim(),
+      contactPhone: platformSettings.contactPhone.trim(),
+    });
+    setSettingsSavingKey(null);
+    if (!res.ok) {
+      setSettingsFlash({ type: 'err', text: res.error });
+      return;
+    }
+    applySettingsDtoToForm(res.data.settings);
+    setSettingsFlash({ type: 'ok', text: 'Platform settings saved.' });
   };
 
-  const openProjectDetails = (project: typeof projectsData[0]) => {
+  const handleSaveInvestmentRules = async () => {
+    setSettingsFlash(null);
+    setSettingsSavingKey('investment');
+    const res = await putJson<{ settings: GlobalSettingsDTO }>(SETTINGS_API, {
+      minInvestment: investmentRules.minInvestment,
+      maxInvestment: investmentRules.maxInvestment,
+      platformFee: investmentRules.platformFee,
+      currency: investmentRules.currency.trim() || 'USD',
+    });
+    setSettingsSavingKey(null);
+    if (!res.ok) {
+      setSettingsFlash({ type: 'err', text: res.error });
+      return;
+    }
+    applySettingsDtoToForm(res.data.settings);
+    setSettingsFlash({ type: 'ok', text: 'Investment rules saved.' });
+  };
+
+  const handleSavePaymentSettings = async () => {
+    setSettingsFlash(null);
+    setSettingsSavingKey('payment');
+    const res = await putJson<{ settings: GlobalSettingsDTO }>(SETTINGS_API, {
+      depositsEnabled: paymentSettings.depositsEnabled,
+      withdrawalsEnabled: paymentSettings.withdrawalsEnabled,
+      transactionFee: paymentSettings.transactionFee,
+    });
+    setSettingsSavingKey(null);
+    if (!res.ok) {
+      setSettingsFlash({ type: 'err', text: res.error });
+      return;
+    }
+    applySettingsDtoToForm(res.data.settings);
+    setSettingsFlash({ type: 'ok', text: 'Payment settings saved.' });
+  };
+
+  const handleSaveNotificationSettings = async () => {
+    setSettingsFlash(null);
+    setSettingsSavingKey('notifications');
+    const res = await putJson<{ settings: GlobalSettingsDTO }>(SETTINGS_API, {
+      emailNotifications: notificationSettings.emailNotifications,
+      investmentEmails: notificationSettings.investmentEmails,
+      adminAlerts: notificationSettings.adminAlerts,
+    });
+    setSettingsSavingKey(null);
+    if (!res.ok) {
+      setSettingsFlash({ type: 'err', text: res.error });
+      return;
+    }
+    applySettingsDtoToForm(res.data.settings);
+    setSettingsFlash({ type: 'ok', text: 'Notification settings saved.' });
+  };
+
+  const handleSaveSecuritySettings = async () => {
+    setSettingsFlash(null);
+    setSettingsSavingKey('security');
+    const res = await putJson<{ settings: GlobalSettingsDTO }>(SETTINGS_API, {
+      twoFactorAuth: securitySettings.twoFactorAuth,
+      sessionTimeout: securitySettings.sessionTimeout,
+    });
+    setSettingsSavingKey(null);
+    if (!res.ok) {
+      setSettingsFlash({ type: 'err', text: res.error });
+      return;
+    }
+    applySettingsDtoToForm(res.data.settings);
+    setSettingsFlash({ type: 'ok', text: 'Security settings saved.' });
+  };
+
+  const handleAddProject = async () => {
+    setAdminFormError('');
+    if (!newProject.title.trim()) {
+      setAdminFormError('Title is required.');
+      return;
+    }
+    if (!addCoverFile) {
+      setAdminFormError('Upload a primary cover image (required by the server).');
+      return;
+    }
+    setAdminBusy(true);
+    const features = newProject.featuresText
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const fd = new FormData();
+    fd.append('title', newProject.title.trim());
+    fd.append('location', newProject.location.trim());
+    fd.append('category', newProject.category.trim());
+    fd.append('minInvestment', String(newProject.minInvestment));
+    fd.append('totalFunding', String(newProject.totalFunding));
+    fd.append('currentFunding', String(newProject.currentFunding));
+    fd.append('investorsCount', String(newProject.investors));
+    fd.append('projectedROI', String(newProject.projectedROI));
+    fd.append('payoutFrequency', newProject.payoutFrequency);
+    fd.append('fundingDeadline', newProject.fundingDeadline);
+    fd.append('description', newProject.description.trim() || '—');
+    fd.append('features', JSON.stringify(features));
+    fd.append('status', newProject.status);
+    fd.append('timeline', JSON.stringify([{ phase: 'Kickoff', status: 'upcoming' }]));
+    fd.append('image', addCoverFile);
+    addGalleryFiles.forEach((f) => fd.append('images', f));
+    const res = await postFormData<ProjectCreateResponse>('/api/v1/projects', fd);
+    setAdminBusy(false);
+    if (!res.ok) {
+      setAdminFormError(res.error);
+      return;
+    }
+    const created = normalizeApiProject(res.data.project);
+    setProjects((prev) => [created, ...prev]);
+    setIsAddModalOpen(false);
+    resetAddForm();
+  };
+
+  const handleDeleteProject = async () => {
+    if (!deleteProjectId) return;
+    setAdminBusy(true);
+    const res = await deleteJson<{ message?: string }>(`/api/v1/projects/${deleteProjectId}`);
+    setAdminBusy(false);
+    if (!res.ok) {
+      setAdminFormError(res.error);
+      return;
+    }
+    setProjects((prev) => prev.filter((p) => p.id !== deleteProjectId));
+    setDeleteProjectId(null);
+    setIsDeleteModalOpen(false);
+  };
+
+  const openProjectDetails = (project: Project) => {
     setSelectedProject({ ...project });
+    setEditCoverFile(null);
+    setEditGalleryFiles([]);
+    setAdminFormError('');
     setIsDetailsModalOpen(true);
   };
 
-  const handleUpdateProject = () => {
+  const handleUpdateProject = async () => {
     if (!selectedProject) return;
-    setProjects(prev => prev.map(p => p.id === selectedProject.id ? selectedProject : p));
+    setAdminFormError('');
+    setAdminBusy(true);
+    const id = selectedProject.id;
+    let res:
+      | { ok: true; data: ProjectUpdateResponse }
+      | { ok: false; status: number; error: string };
+
+    if (editCoverFile || editGalleryFiles.length > 0) {
+      const fd = new FormData();
+      fd.append('title', selectedProject.title);
+      fd.append('location', selectedProject.location);
+      fd.append('category', selectedProject.category);
+      fd.append('minInvestment', String(selectedProject.minInvestment));
+      fd.append('totalFunding', String(selectedProject.totalFunding));
+      fd.append('currentFunding', String(selectedProject.currentFunding));
+      fd.append('investorsCount', String(selectedProject.investors));
+      fd.append('projectedROI', String(selectedProject.projectedROI));
+      fd.append('payoutFrequency', selectedProject.payoutFrequency);
+      fd.append('fundingDeadline', selectedProject.fundingDeadline);
+      fd.append('description', selectedProject.description);
+      fd.append('features', JSON.stringify(selectedProject.features));
+      fd.append('status', selectedProject.status);
+      if (editCoverFile) fd.append('image', editCoverFile);
+      editGalleryFiles.forEach((f) => fd.append('images', f));
+      res = await putFormData<ProjectUpdateResponse>(`/api/v1/projects/${id}`, fd);
+    } else {
+      res = await putJson<ProjectUpdateResponse>(`/api/v1/projects/${id}`, {
+        title: selectedProject.title,
+        location: selectedProject.location,
+        category: selectedProject.category,
+        minInvestment: selectedProject.minInvestment,
+        totalFunding: selectedProject.totalFunding,
+        currentFunding: selectedProject.currentFunding,
+        investorsCount: selectedProject.investors,
+        projectedROI: selectedProject.projectedROI,
+        payoutFrequency: selectedProject.payoutFrequency,
+        fundingDeadline: selectedProject.fundingDeadline,
+        description: selectedProject.description,
+        features: selectedProject.features,
+        status: selectedProject.status,
+      });
+    }
+
+    setAdminBusy(false);
+    if (!res.ok) {
+      setAdminFormError(res.error);
+      return;
+    }
+    const updated = normalizeApiProject(res.data.project);
+    setProjects((prev) => prev.map((p) => (p.id === id ? updated : p)));
     setIsDetailsModalOpen(false);
+    setSelectedProject(null);
+    setEditCoverFile(null);
+    setEditGalleryFiles([]);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteUserId) return;
+    setDeleteUserBusy(true);
+    const res = await deleteJson<{ message?: string }>(`${USERS_PREFIX}/${deleteUserId}`);
+    setDeleteUserBusy(false);
+    if (!res.ok) {
+      setAdminUsersError(res.error);
+      return;
+    }
+    setAdminUsers((prev) => prev.filter((u) => u.id !== deleteUserId));
+    setDeleteUserId(null);
+    setIsDeleteUserModalOpen(false);
   };
 
   return (
@@ -233,7 +671,8 @@ const [adminProfile, setAdminProfile] = useState({
               </button>
             ))}
             <button
-              onClick={logout}
+              type="button"
+              onClick={handleLogout}
               className="flex items-center gap-2 px-4 py-2 mt-4 rounded-md w-full text-left text-red-600 hover:bg-red-100 transition-colors"
             >
               <LogOut className="h-4 w-4" /> Log Out
@@ -248,13 +687,13 @@ const [adminProfile, setAdminProfile] = useState({
           <>
             <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-10">
-              <StatCard title="Total Users" value={totalUsers.toLocaleString()} icon={<Users className="h-4 w-4" />} subtitle="+8.2% from last month" />
+              <StatCard title="Total Users" value={totalUsers.toLocaleString()} icon={<Users className="h-4 w-4" />} subtitle="Registered accounts" />
               <StatCard title="Total Invested" value={formatCurrency(totalInvested)} icon={<DollarSign className="h-4 w-4" />} subtitle={`${totalInvestors} investors`} />
               <StatCard title="Active Projects" value={activeProjects} icon={<Activity className="h-4 w-4" />} subtitle={`Out of ${projects.length}`} />
               <StatCard title="Platform Revenue" value={formatCurrency(platformRevenue)} icon={<TrendingUp className="h-4 w-4" />} subtitle="2% platform fee" />
             </div>
             <Card className="mb-8">
-              <CardHeader><CardTitle className="text-xl font-semibold">User Growth</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-xl font-semibold">User growth (trend illustration)</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={userGrowthData}>
@@ -270,19 +709,98 @@ const [adminProfile, setAdminProfile] = useState({
           </>
         )}
 
+        {activeSection === 'users' && (
+          <>
+            <h1 className="text-3xl font-bold mb-6">Users</h1>
+            {adminUsersError && (
+              <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+                {adminUsersError}
+              </p>
+            )}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">All accounts</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {adminUsersLoading ? (
+                  <p className="text-sm text-gray-500 py-8 text-center">Loading users…</p>
+                ) : adminUsers.length === 0 ? (
+                  <p className="text-sm text-gray-500 py-8 text-center">No users found.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Joined</TableHead>
+                        <TableHead className="w-[100px] text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {adminUsers.map((u) => (
+                        <TableRow key={u.id}>
+                          <TableCell className="font-medium">{u.name}</TableCell>
+                          <TableCell>{u.email}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="capitalize">
+                              {u.role}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{new Date(u.createdAt).toLocaleDateString()}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              disabled={u.id === user.id}
+                              title={u.id === user.id ? 'Cannot delete your own account' : 'Delete user'}
+                              onClick={() => {
+                                setDeleteUserId(u.id);
+                                setIsDeleteUserModalOpen(true);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+
         {/* Projects */}
         {activeSection === 'projects' && (
           <>
             <h1 className="text-3xl font-bold mb-6">Projects</h1>
+            {projectsError && (
+              <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+                {projectsError}
+              </p>
+            )}
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setIsAddModalOpen(true)}>
+                  <Button
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                    onClick={() => {
+                      setAdminFormError('');
+                      resetAddForm();
+                      setIsAddModalOpen(true);
+                    }}
+                  >
                     <Plus className="h-4 w-4 mr-2"/> New Project
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
+                {projectsLoading ? (
+                  <p className="text-sm text-gray-500 py-8 text-center">Loading projects…</p>
+                ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -301,7 +819,12 @@ const [adminProfile, setAdminProfile] = useState({
                         <TableCell className="font-medium">{p.title}</TableCell>
                         <TableCell><Badge variant="outline">{p.category}</Badge></TableCell>
                         <TableCell>{p.location}</TableCell>
-                        <TableCell>{((p.currentFunding/p.totalFunding)*100).toFixed(0)}%</TableCell>
+                        <TableCell>
+                          {p.totalFunding > 0
+                            ? ((p.currentFunding / p.totalFunding) * 100).toFixed(0)
+                            : '0'}
+                          %
+                        </TableCell>
                         <TableCell>{p.investors}</TableCell>
                         <TableCell><Badge>{p.status}</Badge></TableCell>
                         <TableCell className="flex justify-end gap-2">
@@ -316,6 +839,7 @@ const [adminProfile, setAdminProfile] = useState({
                     ))}
                   </TableBody>
                 </Table>
+                )}
               </CardContent>
             </Card>
           </>
@@ -324,34 +848,51 @@ const [adminProfile, setAdminProfile] = useState({
         {/* Transactions */}
         {activeSection === 'transactions' && (
           <>
-            <h1 className="text-3xl font-bold mb-6">Recent Transactions</h1>
+            <h1 className="text-3xl font-bold mb-6">Platform transactions</h1>
             <Card>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Investor</TableHead>
-                      <TableHead>Project</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recentTransactions.map(t => (
-                      <TableRow key={t.id}>
-                        <TableCell>{t.investor}</TableCell>
-                        <TableCell>{t.project}</TableCell>
-                        <TableCell>{formatCurrency(t.amount)}</TableCell>
-                        <TableCell>{new Date(t.date).toLocaleDateString()}</TableCell>
-                        <TableCell className="flex items-center gap-2">
-                          {t.status==='completed' ? <CheckCircle className="h-4 w-4 text-green-600"/> : <Clock className="h-4 w-4 text-yellow-600"/>}
-                          {t.status==='completed' ? 'Completed':'Pending'}
-                        </TableCell>
+              <CardContent className="pt-6">
+                {adminTransactionsLoading ? (
+                  <p className="text-sm text-slate-500 py-4">Loading transactions…</p>
+                ) : adminTransactionsError ? (
+                  <p className="text-sm text-red-600 py-4">{adminTransactionsError}</p>
+                ) : adminTransactions.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-4">No transactions yet.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Investor</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {adminTransactions.map((t) => (
+                        <TableRow key={t.id}>
+                          <TableCell>
+                            <div className="font-medium">{t.user?.name ?? '—'}</div>
+                            <div className="text-xs text-slate-500">{t.user?.email ?? ''}</div>
+                          </TableCell>
+                          <TableCell>{transactionTypeLabel(t.type)}</TableCell>
+                          <TableCell>{formatCurrency(t.amount)}</TableCell>
+                          <TableCell>{new Date(t.createdAt).toLocaleString()}</TableCell>
+                          <TableCell className="flex items-center gap-2">
+                            {t.status === 'completed' ? (
+                              <CheckCircle className="h-4 w-4 text-green-600 shrink-0" />
+                            ) : t.status === 'failed' ? (
+                              <XCircle className="h-4 w-4 text-red-600 shrink-0" />
+                            ) : (
+                              <Clock className="h-4 w-4 text-yellow-600 shrink-0" />
+                            )}
+                            <span className="capitalize">{t.status}</span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </>
@@ -443,10 +984,63 @@ const [adminProfile, setAdminProfile] = useState({
     </Card>
   </>
 )}
+
+        {activeSection === 'memberships' && (
+          <>
+            <h1 className="text-3xl font-bold mb-6">Membership Insights</h1>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+              <StatCard title="Member Growth (30d)" value="+18%" icon={<TrendingUp className="h-4 w-4" />} subtitle="Application-driven growth" />
+              <StatCard title="Retention Rate" value="91%" icon={<Users className="h-4 w-4" />} subtitle="Active paid members" />
+              <StatCard title="Revenue / Member" value="$74" icon={<DollarSign className="h-4 w-4" />} subtitle="Average monthly recurring" />
+              <StatCard title="Engagement Score" value="8.6/10" icon={<Activity className="h-4 w-4" />} subtitle="Events + community actions" />
+            </div>
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Membership Operations</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-slate-600">
+                <p>Review pending applications, approve/reject with feedback, and control tier assignments.</p>
+                <p>Track subscription lifecycle states (active, expired, canceled) and auto-expiry handling.</p>
+                <p>Map platform features to membership tiers for controlled access and monetization.</p>
+                <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => navigate('/admin/memberships')}>
+                  Open Membership Admin Page
+                </Button>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Investor-safe metrics</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-slate-600">
+                This view surfaces growth, retention, and revenue trends without exposing private member-level data.
+              </CardContent>
+            </Card>
+          </>
+        )}
         {/* Settings */}
         {activeSection === 'settings' && (
 <>
 <h1 className="text-3xl font-bold mb-6">Settings</h1>
+
+{settingsPanelLoading && (
+  <p className="text-sm text-slate-500 mb-4">Loading settings from the server…</p>
+)}
+{settingsPanelError && (
+  <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-3 mb-4">
+    {settingsPanelError}
+  </p>
+)}
+{settingsFlash && (
+  <p
+    className={
+      settingsFlash.type === 'ok'
+        ? 'text-sm text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-4 py-3 mb-4'
+        : 'text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-3 mb-4'
+    }
+  >
+    {settingsFlash.text}
+  </p>
+)}
 
 <div className="grid gap-6 lg:grid-cols-2">
 
@@ -488,8 +1082,12 @@ setPlatformSettings({...platformSettings,contactPhone:e.target.value})
 />
 </div>
 
-<Button className="bg-emerald-600 hover:bg-emerald-700">
-Save Platform Settings
+<Button
+  className="bg-emerald-600 hover:bg-emerald-700"
+  disabled={settingsPanelLoading || settingsSavingKey !== null}
+  onClick={() => void handleSavePlatformSettings()}
+>
+  {settingsSavingKey === 'platform' ? 'Saving…' : 'Save Platform Settings'}
 </Button>
 
 </CardContent>
@@ -547,8 +1145,12 @@ setInvestmentRules({...investmentRules,currency:e.target.value})
 />
 </div>
 
-<Button className="bg-emerald-600 hover:bg-emerald-700">
-Save Investment Rules
+<Button
+  className="bg-emerald-600 hover:bg-emerald-700"
+  disabled={settingsPanelLoading || settingsSavingKey !== null}
+  onClick={() => void handleSaveInvestmentRules()}
+>
+  {settingsSavingKey === 'investment' ? 'Saving…' : 'Save Investment Rules'}
 </Button>
 
 </CardContent>
@@ -596,8 +1198,12 @@ setPaymentSettings({...paymentSettings,transactionFee:Number(e.target.value)})
 />
 </div>
 
-<Button className="bg-emerald-600 hover:bg-emerald-700">
-Save Payment Settings
+<Button
+  className="bg-emerald-600 hover:bg-emerald-700"
+  disabled={settingsPanelLoading || settingsSavingKey !== null}
+  onClick={() => void handleSavePaymentSettings()}
+>
+  {settingsSavingKey === 'payment' ? 'Saving…' : 'Save Payment Settings'}
 </Button>
 
 </CardContent>
@@ -645,8 +1251,12 @@ setNotificationSettings({...notificationSettings,adminAlerts:e.target.checked})
 />
 </div>
 
-<Button className="bg-emerald-600 hover:bg-emerald-700">
-Save Notifications
+<Button
+  className="bg-emerald-600 hover:bg-emerald-700"
+  disabled={settingsPanelLoading || settingsSavingKey !== null}
+  onClick={() => void handleSaveNotificationSettings()}
+>
+  {settingsSavingKey === 'notifications' ? 'Saving…' : 'Save Notifications'}
 </Button>
 
 </CardContent>
@@ -683,8 +1293,12 @@ setSecuritySettings({...securitySettings,sessionTimeout:Number(e.target.value)})
 />
 </div>
 
-<Button className="bg-emerald-600 hover:bg-emerald-700">
-Save Security Settings
+<Button
+  className="bg-emerald-600 hover:bg-emerald-700"
+  disabled={settingsPanelLoading || settingsSavingKey !== null}
+  onClick={() => void handleSaveSecuritySettings()}
+>
+  {settingsSavingKey === 'security' ? 'Saving…' : 'Save Security Settings'}
 </Button>
 
 </CardContent>
@@ -698,6 +1312,12 @@ Save Security Settings
 </CardHeader>
 
 <CardContent className="space-y-4">
+{adminProfileErr && (
+  <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">{adminProfileErr}</p>
+)}
+{adminProfileMsg && (
+  <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-md px-3 py-2">{adminProfileMsg}</p>
+)}
 
 <div>
 <Label>Name</Label>
@@ -713,16 +1333,95 @@ setAdminProfile({...adminProfile,name:e.target.value})
 <Label>Email</Label>
 <Input
 value={adminProfile.email}
-onChange={(e)=>
-setAdminProfile({...adminProfile,email:e.target.value})
-}
+disabled
+className="bg-gray-50"
 />
+<p className="text-xs text-gray-500 mt-1">Email is your login and cannot be changed here.</p>
 </div>
 
-<Button className="bg-emerald-600 hover:bg-emerald-700">
-Update Profile
+<Button
+  className="bg-emerald-600 hover:bg-emerald-700"
+  disabled={adminProfileSaving || !adminProfile.name.trim()}
+  onClick={() => {
+    void (async () => {
+      setAdminProfileErr('');
+      setAdminProfileMsg('');
+      setAdminProfileSaving(true);
+      const res = await putJson(`${USERS_PREFIX}/profile`, { name: adminProfile.name.trim() });
+      setAdminProfileSaving(false);
+      if (!res.ok) {
+        setAdminProfileErr(res.error);
+        return;
+      }
+      setAdminProfileMsg('Profile updated.');
+      await refreshUser();
+    })();
+  }}
+>
+{adminProfileSaving ? 'Saving…' : 'Update Profile'}
 </Button>
 
+</CardContent>
+</Card>
+
+<Card>
+<CardHeader>
+<CardTitle>Change password</CardTitle>
+</CardHeader>
+<CardContent className="space-y-4">
+{adminPwErr && (
+  <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">{adminPwErr}</p>
+)}
+{adminPwMsg && (
+  <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-md px-3 py-2">{adminPwMsg}</p>
+)}
+<div>
+<Label>Current password</Label>
+<Input type="password" autoComplete="current-password" value={adminPwCurrent} onChange={(e) => setAdminPwCurrent(e.target.value)} />
+</div>
+<div>
+<Label>New password</Label>
+<Input type="password" autoComplete="new-password" value={adminPwNew} onChange={(e) => setAdminPwNew(e.target.value)} />
+</div>
+<div>
+<Label>Confirm new password</Label>
+<Input type="password" autoComplete="new-password" value={adminPwConfirm} onChange={(e) => setAdminPwConfirm(e.target.value)} />
+</div>
+<Button
+  variant="outline"
+  className="border-emerald-200 text-emerald-800"
+  disabled={adminPwBusy}
+  onClick={() => {
+    void (async () => {
+      setAdminPwErr('');
+      setAdminPwMsg('');
+      if (adminPwNew !== adminPwConfirm) {
+        setAdminPwErr('New passwords do not match.');
+        return;
+      }
+      if (adminPwNew.length < 6) {
+        setAdminPwErr('New password must be at least 6 characters.');
+        return;
+      }
+      setAdminPwBusy(true);
+      const res = await putJson(`${USERS_PREFIX}/change-password`, {
+        currentPassword: adminPwCurrent,
+        newPassword: adminPwNew,
+      });
+      setAdminPwBusy(false);
+      if (!res.ok) {
+        setAdminPwErr(res.error);
+        return;
+      }
+      setAdminPwMsg('Password updated.');
+      setAdminPwCurrent('');
+      setAdminPwNew('');
+      setAdminPwConfirm('');
+    })();
+  }}
+>
+{adminPwBusy ? 'Updating…' : 'Update password'}
+</Button>
 </CardContent>
 </Card>
 
@@ -730,31 +1429,160 @@ Update Profile
 </>
 )}
         {/* Add Project Modal */}
-        <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader><DialogTitle>Add New Project</DialogTitle></DialogHeader>
+        <Dialog
+          open={isAddModalOpen}
+          onOpenChange={(open) => {
+            setIsAddModalOpen(open);
+            if (!open) {
+              setAdminFormError('');
+              resetAddForm();
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New Project</DialogTitle>
+            </DialogHeader>
+            {adminFormError && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">{adminFormError}</p>
+            )}
             <div className="space-y-4">
-              <div><Label>Project Title</Label><Input value={newProject.title} onChange={e => handleInputChange('title', e.target.value)} /></div>
-              <div><Label>Category</Label><Input value={newProject.category} onChange={e => handleInputChange('category', e.target.value)} /></div>
-              <div><Label>Location</Label><Input value={newProject.location} onChange={e => handleInputChange('location', e.target.value)} /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label>Total Funding</Label><Input type="number" value={newProject.totalFunding} onChange={e => handleInputChange('totalFunding', Number(e.target.value))} /></div>
+              <div>
+                <Label>Project title</Label>
+                <Input value={newProject.title} onChange={(e) => handleInputChange('title', e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Status</Label>
-                  <Select value={newProject.status} onValueChange={value => handleInputChange('status', value)}>
-                    <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="open">Open</SelectItem>
-                      <SelectItem value="funded">Funded</SelectItem>
-                      <SelectItem value="closed">Closed</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label>Category</Label>
+                  <Input value={newProject.category} onChange={(e) => handleInputChange('category', e.target.value)} />
                 </div>
+                <div>
+                  <Label>Location</Label>
+                  <Input value={newProject.location} onChange={(e) => handleInputChange('location', e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Min investment (USD)</Label>
+                  <Input
+                    type="number"
+                    value={newProject.minInvestment}
+                    onChange={(e) => handleInputChange('minInvestment', Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <Label>Projected ROI (%)</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={newProject.projectedROI}
+                    onChange={(e) => handleInputChange('projectedROI', Number(e.target.value))}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Total funding</Label>
+                  <Input
+                    type="number"
+                    value={newProject.totalFunding}
+                    onChange={(e) => handleInputChange('totalFunding', Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <Label>Current funding</Label>
+                  <Input
+                    type="number"
+                    value={newProject.currentFunding}
+                    onChange={(e) => handleInputChange('currentFunding', Number(e.target.value))}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Investors count</Label>
+                  <Input
+                    type="number"
+                    value={newProject.investors}
+                    onChange={(e) => handleInputChange('investors', Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <Label>Payout frequency</Label>
+                  <Input
+                    value={newProject.payoutFrequency}
+                    onChange={(e) => handleInputChange('payoutFrequency', e.target.value)}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Funding deadline</Label>
+                <Input
+                  type="date"
+                  value={newProject.fundingDeadline}
+                  onChange={(e) => handleInputChange('fundingDeadline', e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Description</Label>
+                <Textarea
+                  className="min-h-[80px]"
+                  value={newProject.description}
+                  onChange={(e) => handleInputChange('description', e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Features (one per line)</Label>
+                <Textarea
+                  className="min-h-[72px]"
+                  placeholder={'One feature per line'}
+                  value={newProject.featuresText}
+                  onChange={(e) => handleInputChange('featuresText', e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Cover image (required)</Label>
+                <Input
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  onChange={(e) => setAddCoverFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+              <div>
+                <Label>Gallery images (optional)</Label>
+                <Input
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  multiple
+                  onChange={(e) => setAddGalleryFiles(e.target.files ? Array.from(e.target.files) : [])}
+                />
+              </div>
+              <div>
+                <Label>Status</Label>
+                <Select value={newProject.status} onValueChange={(value) => handleInputChange('status', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="open">Open</SelectItem>
+                    <SelectItem value="funded">Funded</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <DialogFooter className="mt-4 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
-              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleAddProject}>Add Project</Button>
+              <Button variant="outline" onClick={() => setIsAddModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                disabled={adminBusy}
+                onClick={() => void handleAddProject()}
+              >
+                {adminBusy ? 'Saving…' : 'Add project'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -768,30 +1596,217 @@ Update Profile
             </div>
             <DialogFooter className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
-              <Button variant="destructive" onClick={handleDeleteProject}>Delete</Button>
+              <Button variant="destructive" disabled={adminBusy} onClick={() => void handleDeleteProject()}>
+                {adminBusy ? 'Deleting…' : 'Delete'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={isDeleteUserModalOpen}
+          onOpenChange={(open) => {
+            setIsDeleteUserModalOpen(open);
+            if (!open) setDeleteUserId(null);
+          }}
+        >
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Delete user</DialogTitle>
+            </DialogHeader>
+            <div className="py-4 text-gray-700">
+              This removes the user and their related data (investments, transactions). This cannot be undone.
+            </div>
+            <DialogFooter className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsDeleteUserModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" disabled={deleteUserBusy} onClick={() => void handleDeleteUser()}>
+                {deleteUserBusy ? 'Deleting…' : 'Delete user'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
         {/* Editable Project Details Modal */}
-        <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader><DialogTitle>Project Details</DialogTitle></DialogHeader>
+        <Dialog open={isDetailsModalOpen} onOpenChange={(open) => {
+          setIsDetailsModalOpen(open);
+          if (!open) {
+            setAdminFormError('');
+            setEditCoverFile(null);
+            setEditGalleryFiles([]);
+          }
+        }}>
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Project details</DialogTitle>
+            </DialogHeader>
+            {adminFormError && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">{adminFormError}</p>
+            )}
             {selectedProject && (
               <div className="space-y-3">
-                <div><Label>Title</Label><Input value={selectedProject.title} onChange={e => setSelectedProject({...selectedProject, title: e.target.value})} /></div>
-                <div><Label>Category</Label><Input value={selectedProject.category} onChange={e => setSelectedProject({...selectedProject, category: e.target.value})} /></div>
-                <div><Label>Location</Label><Input value={selectedProject.location} onChange={e => setSelectedProject({...selectedProject, location: e.target.value})} /></div>
-                <div><Label>Total Funding</Label><Input type="number" value={selectedProject.totalFunding} onChange={e => setSelectedProject({...selectedProject, totalFunding: Number(e.target.value)})} /></div>
-                <div><Label>Current Funding</Label><Input type="number" value={selectedProject.currentFunding} onChange={e => setSelectedProject({...selectedProject, currentFunding: Number(e.target.value)})} /></div>
-                <div><Label>Investors</Label><Input type="number" value={selectedProject.investors} onChange={e => setSelectedProject({...selectedProject, investors: Number(e.target.value)})} /></div>
+                <div>
+                  <Label>Title</Label>
+                  <Input
+                    value={selectedProject.title}
+                    onChange={(e) => setSelectedProject({ ...selectedProject, title: e.target.value })}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Category</Label>
+                    <Input
+                      value={selectedProject.category}
+                      onChange={(e) => setSelectedProject({ ...selectedProject, category: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Location</Label>
+                    <Input
+                      value={selectedProject.location}
+                      onChange={(e) => setSelectedProject({ ...selectedProject, location: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Min investment</Label>
+                    <Input
+                      type="number"
+                      value={selectedProject.minInvestment}
+                      onChange={(e) =>
+                        setSelectedProject({ ...selectedProject, minInvestment: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Projected ROI (%)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={selectedProject.projectedROI}
+                      onChange={(e) =>
+                        setSelectedProject({ ...selectedProject, projectedROI: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Total funding</Label>
+                    <Input
+                      type="number"
+                      value={selectedProject.totalFunding}
+                      onChange={(e) =>
+                        setSelectedProject({ ...selectedProject, totalFunding: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Current funding</Label>
+                    <Input
+                      type="number"
+                      value={selectedProject.currentFunding}
+                      onChange={(e) =>
+                        setSelectedProject({ ...selectedProject, currentFunding: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Investors</Label>
+                    <Input
+                      type="number"
+                      value={selectedProject.investors}
+                      onChange={(e) =>
+                        setSelectedProject({ ...selectedProject, investors: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Payout frequency</Label>
+                    <Input
+                      value={selectedProject.payoutFrequency}
+                      onChange={(e) =>
+                        setSelectedProject({ ...selectedProject, payoutFrequency: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Funding deadline</Label>
+                  <Input
+                    type="date"
+                    value={selectedProject.fundingDeadline.slice(0, 10)}
+                    onChange={(e) =>
+                      setSelectedProject({
+                        ...selectedProject,
+                        fundingDeadline: new Date(e.target.value + 'T12:00:00').toISOString(),
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Description</Label>
+                  <Textarea
+                    className="min-h-[80px]"
+                    value={selectedProject.description}
+                    onChange={(e) => setSelectedProject({ ...selectedProject, description: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Features (one per line)</Label>
+                  <Textarea
+                    className="min-h-[72px]"
+                    value={selectedProject.features.join('\n')}
+                    onChange={(e) =>
+                      setSelectedProject({
+                        ...selectedProject,
+                        features: e.target.value
+                          .split('\n')
+                          .map((s) => s.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>New cover image (optional)</Label>
+                  <Input
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    onChange={(e) => setEditCoverFile(e.target.files?.[0] ?? null)}
+                  />
+                </div>
+                <div>
+                  <Label>Add gallery images (optional)</Label>
+                  <Input
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    multiple
+                    onChange={(e) => setEditGalleryFiles(e.target.files ? Array.from(e.target.files) : [])}
+                  />
+                </div>
                 <div>
                   <Label>Status</Label>
-                  <Select value={selectedProject.status} onValueChange={value => setSelectedProject({...selectedProject, status: value})}>
-                    <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                  <Select
+                    value={selectedProject.status}
+                    onValueChange={(value) =>
+                      setSelectedProject({
+                        ...selectedProject,
+                        status: value as Project['status'],
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="open">Open</SelectItem>
                       <SelectItem value="funded">Funded</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="closed">Closed</SelectItem>
                     </SelectContent>
                   </Select>
@@ -799,8 +1814,16 @@ Update Profile
               </div>
             )}
             <DialogFooter className="mt-4 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsDetailsModalOpen(false)}>Cancel</Button>
-              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleUpdateProject}>Update</Button>
+              <Button variant="outline" onClick={() => setIsDetailsModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                disabled={adminBusy}
+                onClick={() => void handleUpdateProject()}
+              >
+                {adminBusy ? 'Saving…' : 'Update'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
