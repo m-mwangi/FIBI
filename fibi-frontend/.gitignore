@@ -1,4 +1,8 @@
 /node_modules
+/dist
+/.vite
+
+# Frontend local env/secrets
 .env
 .env.*
 *.env
@@ -6,5 +10,5 @@
 !.env.example
 !*.env.example
 
-
-/generated/prisma
+# Logs
+*.log
