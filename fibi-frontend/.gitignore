@@ -1,0 +1,14 @@
+/node_modules
+/dist
+/.vite
+
+# Frontend env files
+.env
+.env.*
+*.env
+*.env.*
+!.env.example
+!*.env.example
+
+# Local logs
+*.log
