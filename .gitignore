@@ -3,4 +3,20 @@ node_modules/
 .vite/
 dist/
 build/
+
+# Environment secrets
 .env
+.env.*
+*.env
+*.env.*
+
+# Keep safe templates tracked
+!.env.example
+!*.env.example
+!.env.docker.example
+
+# Common local artifacts
+*.log
+.DS_Store
+.idea/
+.vscode/
