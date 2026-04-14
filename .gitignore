@@ -3,4 +3,13 @@ node_modules/
 .vite/
 dist/
 build/
+# Environment secrets
 .env
+.env.*
+*.env
+*.env.*
+
+# Keep non-secret env templates tracked
+!.env.example
+!*.env.example
+!.env.docker.example
