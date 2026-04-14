@@ -2,7 +2,7 @@
 /dist
 /.vite
 
-# Frontend env files
+# Frontend local env/secrets
 .env
 .env.*
 *.env
@@ -10,5 +10,5 @@
 !.env.example
 !*.env.example
 
-# Local logs
+# Logs
 *.log

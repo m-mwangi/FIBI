@@ -3,29 +3,12 @@ node_modules/
 .vite/
 dist/
 build/
-<<<<<<< HEAD
-
-=======
-<<<<<<< HEAD
-=======
-
->>>>>>> 97927744d141edf6b8043212c58984d38945be53
->>>>>>> 11ca11d6a22fa08c11d6a2019fa6dd97f85729a5
-# Environment secrets
+# Environment secrets (global)
 .env
 .env.*
 *.env
 *.env.*
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-# Keep non-secret env templates tracked
-!.env.example
-!*.env.example
-!.env.docker.example
-=======
->>>>>>> 11ca11d6a22fa08c11d6a2019fa6dd97f85729a5
 # Keep safe templates tracked
 !.env.example
 !*.env.example
@@ -35,9 +18,4 @@ build/
 *.log
 .DS_Store
 .idea/
-<<<<<<< HEAD
 .vscode/
-=======
-.vscode/
->>>>>>> 97927744d141edf6b8043212c58984d38945be53
->>>>>>> 11ca11d6a22fa08c11d6a2019fa6dd97f85729a5
