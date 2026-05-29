@@ -78,6 +78,8 @@ app.use('/api/v1/membership', membershipRoutes);
 // Error Handler Middleware
 app.use(errorHandler);
 
+
+
 // Start the server
 app.listen(port, () => {
     console.log(`Server is running on http://localhost:${port}`);
