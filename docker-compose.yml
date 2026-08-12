@@ -1,0 +1,155 @@
+# FIBI — production stack for fibicommunity.org
+#
+#   cp .env.docker.example .env   (then fill in the secrets)
+#   ./deploy/init-letsencrypt.sh  (first run only — issues the TLS certificate)
+#   docker compose up -d --build
+#
+# Only the proxy publishes ports. Postgres, the API and the static frontend are
+# reachable only on the internal Docker network.
+
+name: fibi
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    # Blocks setuid/setgid escalation inside the container. Costs nothing and
+    # removes a whole class of container-escape stepping stones.
+    security_opt: &no_new_privs ["no-new-privileges:true"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-fibi}
+      # Deterministic initdb settings; without these the locale comes from the image.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # $$ escapes for compose so the variable is expanded by the shell in the container.
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [internal]
+    logging: &default_logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  backend:
+    build:
+      context: ./BACKEND
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    security_opt: *no_new_privs
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env — see .env.docker.example}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      # Scheme + host, no trailing slash. Drives the CORS allow-list.
+      FRONTEND_URL: ${FRONTEND_URL:?Set FRONTEND_URL in .env}
+      # Express sits behind the nginx proxy; this many hops of X-Forwarded-For are trusted.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+    logging: *default_logging
+
+  frontend:
+    build:
+      context: ./fibi-frontend
+      dockerfile: Dockerfile
+      args:
+        # Empty = same-origin. The proxy serves the app and /api from one host,
+        # so the browser calls /api/v1/... relatively and no CORS preflight occurs.
+        VITE_API_URL: ${VITE_API_URL-}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        VITE_FACEBOOK_APP_ID: ${VITE_FACEBOOK_APP_ID:-}
+        VITE_APPLE_CLIENT_ID: ${VITE_APPLE_CLIENT_ID:-}
+        VITE_APPLE_REDIRECT_URI: ${VITE_APPLE_REDIRECT_URI:-}
+    restart: unless-stopped
+    security_opt: *no_new_privs
+    depends_on:
+      - backend
+    networks: [internal]
+    logging: *default_logging
+
+  proxy:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    security_opt: *no_new_privs
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+      # true only when Cloudflare proxies the hostname (orange cloud). Enables
+      # the CF-Connecting-IP trust list so rate limits and logs see real client
+      # IPs rather than Cloudflare edge addresses.
+      CLOUDFLARE: ${CLOUDFLARE:-false}
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/templates/nginx.conf.template:ro
+      - ./deploy/ssl-params.conf:/etc/nginx/conf.d/ssl-params.conf:ro
+      - ./deploy/cloudflare-realip.conf:/etc/nginx/cloudflare-realip.conf:ro
+      - ./deploy/proxy-entrypoint.sh:/docker-entrypoint.d/99-fibi.sh:ro
+      - letsencrypt_certs:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
+    entrypoint: ["/bin/sh", "/docker-entrypoint.d/99-fibi.sh"]
+    # Docker's default nofile limit of 1024 is below nginx's worker_connections,
+    # which would otherwise cap concurrent connections well under the configured
+    # 2048 per worker.
+    ulimits:
+      nofile:
+        soft: 8192
+        hard: 8192
+    # Both images declare a HEALTHCHECK, so waiting on health (not just "started")
+    # stops the proxy from serving 502s during the window between a container
+    # starting and its app actually listening.
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks: [internal]
+    logging: *default_logging
+
+  # Renews the certificate. Certbot wakes every 12h and only actually renews
+  # inside the 30-day expiry window, so this is cheap. The proxy picks up the new
+  # files on its own reload timer (see deploy/proxy-entrypoint.sh).
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    security_opt: *no_new_privs
+    volumes:
+      - letsencrypt_certs:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+    entrypoint: >
+      /bin/sh -c "trap exit TERM;
+      while :; do certbot renew --webroot -w /var/www/certbot --quiet;
+      sleep 12h & wait $${!}; done"
+    depends_on:
+      - proxy
+    networks: [internal]
+    logging: *default_logging
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  backend_uploads:
+  letsencrypt_certs:
+  certbot_webroot:

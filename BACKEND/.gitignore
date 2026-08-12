@@ -8,3 +8,7 @@
 
 
 /generated/prisma
+
+# Runtime upload storage — served from the `backend_uploads` Docker volume in
+# production, so the contents must never be committed.
+/uploads/

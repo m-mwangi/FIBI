@@ -1,0 +1,122 @@
+#!/bin/sh
+# FIBI pre-commit guard — blocks credentials and build junk from entering git.
+#
+# Enable once per clone (it is not automatic; git never runs hooks from a fresh
+# checkout without being told where they live):
+#
+#   git config core.hooksPath .githooks
+#
+# Bypass in a genuine emergency with `git commit --no-verify`, but understand
+# what that means: git history is effectively permanent and public once pushed,
+# so a secret committed here has to be *rotated*, not deleted.
+#
+# This scans the STAGED CONTENT, not the working tree, so it sees exactly what
+# the commit would record.
+
+set -eu
+
+RED=''
+YELLOW=''
+RESET=''
+if [ -t 2 ]; then
+  RED="$(printf '\033[31m')"; YELLOW="$(printf '\033[33m')"; RESET="$(printf '\033[0m')"
+fi
+
+fail=0
+note() { printf '%s\n' "$*" >&2; }
+
+# Added/copied/modified files only — a deletion cannot leak anything.
+staged="$(git diff --cached --name-only --diff-filter=ACM)"
+[ -z "$staged" ] && exit 0
+
+# --- 1. Files that must never be committed at all -----------------------------
+# Matched on path, because the contents of a real .env are unpredictable.
+forbidden="$(printf '%s\n' "$staged" | grep -E \
+  '(^|/)\.env($|\.)|(^|/)[^/]*\.env$|\.(pem|key|p8|p12|pfx|jks|keystore)$|(^|/)(id_rsa|id_ed25519)$|(^|/)(secrets|credentials)\.json$|(^|/)service-account.*\.json$' \
+  | grep -vE '\.env\.example$|\.env\.docker\.example$' || true)"
+
+if [ -n "$forbidden" ]; then
+  note "${RED}BLOCKED: these staged files look like secrets:${RESET}"
+  printf '%s\n' "$forbidden" | sed 's/^/  /' >&2
+  note ""
+  note "  Unstage with:  git restore --staged <file>"
+  note "  They should be covered by .gitignore — if one is not, add it."
+  fail=1
+fi
+
+# --- 2. Dependencies and build output -----------------------------------------
+# 75k files of node_modules in a commit is not a secret leak, but it makes the
+# repo unusable and buries real changes in review.
+junk="$(printf '%s\n' "$staged" | grep -E '(^|/)node_modules/|(^|/)dist/|(^|/)build/' || true)"
+if [ -n "$junk" ]; then
+  count="$(printf '%s\n' "$junk" | wc -l | tr -d ' ')"
+  note "${RED}BLOCKED: $count staged file(s) under node_modules/, dist/ or build/.${RESET}"
+  printf '%s\n' "$junk" | head -5 | sed 's/^/  /' >&2
+  [ "$count" -gt 5 ] && note "  ... and $((count - 5)) more"
+  note ""
+  note "  These are rebuilt by 'npm ci' and by the Docker build. Untrack with:"
+  note "    git rm -r --cached <dir>"
+  fail=1
+fi
+
+# --- 3. High-confidence secret values in staged content -----------------------
+# Only patterns with a distinctive, unambiguous prefix are listed here. Generic
+# words like 'password' produce false positives on every login form and teach
+# people to ignore the hook, which is worse than not having one.
+scan_files="$(printf '%s\n' "$staged" | grep -vE '(^|/)node_modules/|\.(png|jpe?g|gif|svg|ico|webp|woff2?|ttf|eot|pdf|zip|gz)$' || true)"
+
+if [ -n "$scan_files" ]; then
+  patterns='sk_live_[0-9a-zA-Z]{20,}|rk_live_[0-9a-zA-Z]{20,}|whsec_[0-9a-zA-Z]{20,}|AIza[0-9A-Za-z_-]{35}|ghp_[0-9A-Za-z]{36}|github_pat_[0-9A-Za-z_]{50,}|xox[baprs]-[0-9A-Za-z-]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|postgres(ql)?://[^:@/[:space:]]+:[^@/[:space:]]+@'
+
+  hits=''
+  hitfile="${TMPDIR:-/tmp}/.fibi-precommit-hits.$$"
+  rm -f "$hitfile"
+  # `git diff --cached` on one file at a time keeps the reported path accurate.
+  # The loop body runs in a subshell (it is on the right of a pipe), so results
+  # are collected through a file rather than a shell variable.
+  printf '%s\n' "$scan_files" | while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    # Added lines only, minus anything that self-identifies as a placeholder.
+    # .env.docker.example legitimately ships a postgres:// URL with a
+    # REPLACE_ME password, and a guard that cries wolf on the template gets
+    # disabled within a week.
+    match="$(git diff --cached -U0 -- "$f" \
+             | grep -E '^\+' | grep -vE '^\+\+\+' \
+             | grep -E "$patterns" \
+             | grep -viE 'REPLACE_ME|CHANGE_?ME|YOUR_|EXAMPLE|PLACEHOLDER|DUMMY|FAKE|<[^>]+>|xxxx' \
+             || true)"
+    if [ -n "$match" ]; then
+      printf '%s\n' "$f" >> "$hitfile"
+    fi
+  done
+
+  if [ -f "$hitfile" ]; then
+    hits="$(cat "$hitfile")"
+    rm -f "$hitfile"
+  fi
+
+  if [ -n "$hits" ]; then
+    note "${RED}BLOCKED: staged changes contain what looks like a live credential:${RESET}"
+    printf '%s\n' "$hits" | sort -u | sed 's/^/  /' >&2
+    note ""
+    note "  Live API keys, private keys and database URLs with an embedded"
+    note "  password belong in .env, which is gitignored."
+    note "  If this is a placeholder, rewrite it so it cannot be mistaken for real"
+    note "  (e.g. sk_live_REPLACE_ME)."
+    fail=1
+  fi
+fi
+
+# --- 4. Advisory: a large diff is usually an accident --------------------------
+n_staged="$(printf '%s\n' "$staged" | wc -l | tr -d ' ')"
+if [ "$fail" -eq 0 ] && [ "$n_staged" -gt 500 ]; then
+  note "${YELLOW}NOTE: $n_staged files staged. Large, but nothing looks unsafe — proceeding.${RESET}"
+fi
+
+if [ "$fail" -ne 0 ]; then
+  note ""
+  note "Commit aborted. Override with --no-verify only if you are certain."
+  exit 1
+fi
+
+exit 0
