@@ -61,7 +61,12 @@ if [ -n "$SERVER_IP" ] && [ -n "$DOMAIN_IP" ] && [ "$SERVER_IP" != "$DOMAIN_IP" 
 fi
 
 # --- 1. Volumes and the ACME webroot -----------------------------------------
-compose up --no-start >/dev/null 2>&1 || true
+# Created explicitly rather than via `compose up --no-start`, which has to build
+# every image before it will create a container — several silent minutes on a
+# first run, for volumes that `docker volume create` produces instantly. Both
+# are no-ops if the volume already exists.
+docker volume create fibi_letsencrypt_certs >/dev/null
+docker volume create fibi_certbot_webroot   >/dev/null
 
 # --- 2. Skip if a real certificate is already present -------------------------
 if [ "$FORCE" != "1" ] && docker run --rm -v fibi_letsencrypt_certs:/etc/letsencrypt \

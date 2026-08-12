@@ -7,14 +7,22 @@ That is the "Full (strict)" mode below, and it is the only mode worth using:
 the alternatives leave the Cloudflare↔origin leg either unencrypted or
 unauthenticated.
 
-Work through this in order. Sections 1–4 are required; 5–8 are hardening you
-should not skip before taking real payments.
+**The domain is already on Cloudflare.** Sections 1–2 are the record of what was
+set up and what each record is for — read them to verify, not to redo. Sections
+3–4 matter when the origin certificate is issued or reissued. Sections 5–9 are
+the parts most easily left half-done, and 5b in particular is not optional if you
+take payments.
+
+Where a step has a script in `deploy/`, the manual equivalent is shown next to
+it. Everything else here is dashboard clicks, which have no scripted form on the
+Free plan.
 
 ---
 
-## 1. Move the domain onto Cloudflare's nameservers
+## 1. Move the domain onto Cloudflare's nameservers — *done*
 
-The domain is registered at Hostinger. Cloudflare needs to serve its DNS.
+The domain is registered at Hostinger and now resolves through Cloudflare. Kept
+here as the record of how it got there, and for the next domain.
 
 1. Sign up at <https://dash.cloudflare.com> and choose **Add a site**.
 2. Enter `fibicommunity.org` (apex only — no `www`, no `https://`).
@@ -112,16 +120,20 @@ Start DMARC at `p=none` and only move to `p=reject` once the reports are clean �
 
 ## 3. Issue the origin certificate (grey cloud)
 
-With both records still **DNS only**, on the VPS:
+Skip this if the certificate is already live — check with
+`docker compose run --rm certbot certificates` on the VPS.
+
+Let's Encrypt validates over plain HTTP against the origin, and Cloudflare
+proxying is the usual cause of a failed first issuance. So set `@` and `www` back
+to **DNS only** for the duration, then on the VPS:
 
 ```bash
 cd /opt/fibi
 ./deploy/init-letsencrypt.sh
 ```
 
-Let's Encrypt validates over plain HTTP against the origin. Proxying at this
-point is the usual cause of a failed first issuance, which is why the records
-start grey.
+[DEPLOYMENT.md §5](DEPLOYMENT.md) has the manual, command-by-command form of the
+same thing if you would rather drive it yourself.
 
 Verify before going further:
 
@@ -224,11 +236,37 @@ the two and you never have to guess which one produced a 429.
 Until you do this, anyone who learns the VPS IP can bypass every rule above by
 connecting to it directly. Once sections 1–5 are verified working:
 
+**Scripted**
+
 ```bash
 sudo ./deploy/ufw-cloudflare.sh
 ```
 
 It allows 80/443 only from Cloudflare's published ranges and leaves SSH alone.
+
+**Manual** — the same thing, step by step:
+
+```bash
+# Never lose SSH, whatever else happens below.
+sudo ufw allow OpenSSH
+
+# Allow the web ports from Cloudflare only.
+for cidr in $(curl -fsS https://www.cloudflare.com/ips-v4) \
+            $(curl -fsS https://www.cloudflare.com/ips-v6); do
+  sudo ufw allow proto tcp from "$cidr" to any port 80  comment 'cloudflare'
+  sudo ufw allow proto tcp from "$cidr" to any port 443 comment 'cloudflare'
+done
+
+# Drop the world-open rules.
+sudo ufw delete allow 80/tcp
+sudo ufw delete allow 443/tcp
+
+sudo ufw reload && sudo ufw status numbered
+```
+
+If either `curl` returns nothing, stop — a partial allow-list black-holes real
+traffic. The script refuses to continue in that case; by hand it is on you.
+
 Confirm the boundary actually holds:
 
 ```bash
