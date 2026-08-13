@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 import {
   ArrowLeft,
+  Check,
+  Copy,
+  CreditCard,
+  Landmark,
   MapPin,
   TrendingUp,
   CheckCircle2,
@@ -25,6 +29,27 @@ import { getJson, postJson } from '@/lib/api';
 import { normalizeApiProject, type ProjectOneResponse } from '@/lib/projects';
 import { useAuth } from '../context/AuthContext';
 
+type PaymentMethodOption = {
+  provider: string;
+  label: string;
+  description: string;
+  settlement: 'instant' | 'delayed';
+  bankName?: string;
+};
+
+type WireInstructions = {
+  reference: string;
+  account: {
+    bankName: string;
+    accountName: string;
+    accountNumber: string;
+    swiftCode: string | null;
+    branch: string | null;
+    currency: string;
+  };
+  instructions: string;
+};
+
 export default function ProjectDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -33,6 +58,12 @@ export default function ProjectDetail() {
   const [loadState, setLoadState] = useState<'loading' | 'error' | 'ready'>('loading');
   const [loadError, setLoadError] = useState('');
   const [investmentAmount, setInvestmentAmount] = useState('');
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<string>('STRIPE');
+  // Set when a bank transfer is initiated: the investor must be shown where to
+  // send money and which reference to quote, and that panel replaces the form.
+  const [wireInstructions, setWireInstructions] = useState<WireInstructions | null>(null);
+  const [copiedRef, setCopiedRef] = useState(false);
   const [currentImage, setCurrentImage] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -72,6 +103,26 @@ export default function ProjectDetail() {
       ? [project.imageUrl]
       : [];
 
+  // Which rails are usable right now. Unauthenticated visitors are not shown a
+  // choice at all — they are sent to log in first.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      const res = await getJson<{ methods: PaymentMethodOption[] }>('/api/v1/payments/methods');
+      if (cancelled || !res.ok) return;
+      const methods = res.data.methods ?? [];
+      setPaymentMethods(methods);
+      if (methods.length > 0 && !methods.some((m) => m.provider === selectedProvider)) {
+        setSelectedProvider(methods[0].provider);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
+
   if (loadState === 'loading') {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center px-4 bg-gradient-to-b from-slate-50 to-emerald-50/30 gap-3">
@@ -98,18 +149,19 @@ export default function ProjectDetail() {
   }
 
   const fundingPct =
-    project.totalFunding > 0
-      ? Math.min(100, (project.currentFunding / project.totalFunding) * 100)
+    project.totalFundingMinor > 0
+      ? Math.min(100, (project.currentFundingMinor / project.totalFundingMinor) * 100)
       : 0;
-  const remaining = project.totalFunding - project.currentFunding;
+  const remaining = project.totalFundingMinor - project.currentFundingMinor;
 
-  const formatCurrency = (amount: number) =>
+  // Takes integer MINOR units (cents), matching the API.
+  const formatCurrency = (minorUnits: number) =>
     new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(amount);
+    }).format(minorUnits / 100);
 
   const categoryLabel = (category: string) =>
     ({ 'eco-lodge': 'Eco lodge', 'solar-roof': 'Solar roof', agriculture: 'Agriculture' } as Record<
@@ -128,10 +180,11 @@ export default function ProjectDetail() {
     }
   };
 
+  /** Returns MINOR units, because that is what formatCurrency takes. */
   const projectedReturn = () => {
-    const a = parseFloat(investmentAmount);
-    if (Number.isNaN(a) || a <= 0) return 0;
-    return a * (project.projectedROI / 100);
+    const major = parseFloat(investmentAmount);
+    if (Number.isNaN(major) || major <= 0) return 0;
+    return Math.round(major * 100 * (project.projectedROI / 100));
   };
 
   const statusBadge =
@@ -161,21 +214,32 @@ export default function ProjectDetail() {
       return;
     }
 
-    const amount = Number(investmentAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
+    // The field is in major units (the user types "500"); everything below the
+    // input — the minimum check and the API — is in minor units.
+    const amountMajor = Number(investmentAmount);
+    if (!Number.isFinite(amountMajor) || amountMajor <= 0) {
       setSubmitError('Enter a valid investment amount.');
       return;
     }
+    const amountMinor = Math.round(amountMajor * 100);
 
-    if (amount < project.minInvestment) {
-      setSubmitError(`Minimum investment is ${formatCurrency(project.minInvestment)}.`);
+    if (amountMinor < project.minInvestmentMinor) {
+      setSubmitError(`Minimum investment is ${formatCurrency(project.minInvestmentMinor)}.`);
       return;
     }
 
     setIsSubmitting(true);
-    const result = await postJson<{ message: string; checkoutUrl?: string }>('/api/v1/investments', {
+    const result = await postJson<{
+      message: string;
+      checkoutUrl?: string;
+      nextAction?:
+        | { type: 'redirect'; url: string }
+        | ({ type: 'bank_transfer' } & WireInstructions)
+        | { type: 'none' };
+    }>('/api/v1/investments', {
       projectId: project.id,
-      amountInvested: amount,
+      amountInvestedMinor: amountMinor,
+      provider: selectedProvider,
     });
     setIsSubmitting(false);
 
@@ -184,15 +248,38 @@ export default function ProjectDetail() {
       return;
     }
 
-    const { checkoutUrl } = result.data;
-    if (!checkoutUrl) {
+    const nextAction = result.data.nextAction;
+
+    // A bank transfer does not redirect anywhere — the investor now has to go
+    // and move money, so the instructions stay on screen.
+    if (nextAction?.type === 'bank_transfer') {
+      setWireInstructions({
+        reference: nextAction.reference,
+        account: nextAction.account,
+        instructions: nextAction.instructions,
+      });
+      setInvestmentAmount('');
+      return;
+    }
+
+    const redirectUrl =
+      nextAction?.type === 'redirect' ? nextAction.url : result.data.checkoutUrl;
+    if (!redirectUrl) {
       setSubmitError(result.data.message || 'Unable to initiate payment.');
       return;
     }
 
     setSubmitSuccess(result.data.message || 'Redirecting to payment…');
     setInvestmentAmount('');
-    window.location.href = checkoutUrl;
+    window.location.href = redirectUrl;
+  };
+
+  const copyReference = () => {
+    if (!wireInstructions) return;
+    void navigator.clipboard?.writeText(wireInstructions.reference).then(() => {
+      setCopiedRef(true);
+      setTimeout(() => setCopiedRef(false), 1800);
+    });
   };
 
   return (
@@ -342,7 +429,7 @@ export default function ProjectDetail() {
             <Card className="sticky top-6 border-0 rounded-2xl shadow-xl shadow-slate-200/50 ring-1 ring-slate-100 overflow-hidden">
               <div className="bg-gradient-to-br from-emerald-600 to-teal-700 px-5 py-4 text-white">
                 <p className="text-xs font-medium uppercase tracking-wider text-emerald-100">Invest</p>
-                <p className="mt-1 text-2xl font-bold">{formatCurrency(project.minInvestment)} min</p>
+                <p className="mt-1 text-2xl font-bold">{formatCurrency(project.minInvestmentMinor)} min</p>
               </div>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base font-semibold text-slate-900">Deal terms</CardTitle>
@@ -373,7 +460,7 @@ export default function ProjectDetail() {
                   <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <p className="text-slate-500">Raised</p>
-                      <p className="font-semibold text-slate-900">{formatCurrency(project.currentFunding)}</p>
+                      <p className="font-semibold text-slate-900">{formatCurrency(project.currentFundingMinor)}</p>
                     </div>
                     <div>
                       <p className="text-slate-500">Remaining</p>
@@ -384,22 +471,87 @@ export default function ProjectDetail() {
 
                 <Separator />
 
+                {wireInstructions ? (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+                      <div className="flex items-start gap-2">
+                        <Landmark className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-emerald-900">
+                            Transfer details ready
+                          </p>
+                          <p className="mt-0.5 text-xs text-emerald-800">
+                            Your investment is reserved. It is confirmed once the transfer reaches us.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* The reference is the only thing tying an incoming wire to
+                        this investment, so it gets the most prominent treatment
+                        and a copy button. */}
+                    <div className="rounded-xl border-2 border-dashed border-emerald-300 bg-white p-4 text-center">
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Payment reference — quote this exactly
+                      </p>
+                      <p className="mt-1 font-mono text-xl font-bold tracking-wider text-slate-900">
+                        {wireInstructions.reference}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={copyReference}
+                        className="mt-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-50"
+                      >
+                        {copiedRef ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copiedRef ? 'Copied' : 'Copy reference'}
+                      </button>
+                    </div>
+
+                    <dl className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+                      {[
+                        ['Bank', wireInstructions.account.bankName],
+                        ['Account name', wireInstructions.account.accountName],
+                        ['Account number', wireInstructions.account.accountNumber],
+                        ['SWIFT / BIC', wireInstructions.account.swiftCode],
+                        ['Branch', wireInstructions.account.branch],
+                        ['Currency', wireInstructions.account.currency],
+                      ]
+                        .filter(([, value]) => Boolean(value))
+                        .map(([label, value]) => (
+                          <div key={label as string} className="flex items-start justify-between gap-3 px-4 py-2.5">
+                            <dt className="text-xs text-slate-500">{label}</dt>
+                            <dd className="text-right text-sm font-medium text-slate-800">{value}</dd>
+                          </div>
+                        ))}
+                    </dl>
+
+                    <p className="text-xs leading-relaxed text-slate-500">{wireInstructions.instructions}</p>
+
+                    <Button
+                      variant="outline"
+                      className="h-11 w-full rounded-xl"
+                      onClick={() => setWireInstructions(null)}
+                    >
+                      Make another investment
+                    </Button>
+                  </div>
+                ) : (
                 <div className="space-y-3">
                   <Label htmlFor="investment" className="text-slate-700">
-                    Investment amount (USD)
+                    Investment amount ({project.currency})
                   </Label>
                   <Input
                     id="investment"
                     type="number"
-                    placeholder={`Min. ${formatCurrency(project.minInvestment)}`}
+                    placeholder={`Min. ${formatCurrency(project.minInvestmentMinor)}`}
                     value={investmentAmount}
                     onChange={(e) => setInvestmentAmount(e.target.value)}
                     className="rounded-xl border-slate-200"
-                    min={project.minInvestment}
+                    min={project.minInvestmentMinor / 100}
                   />
-                  <p className="text-xs text-slate-500">Minimum {formatCurrency(project.minInvestment)}</p>
+                  <p className="text-xs text-slate-500">Minimum {formatCurrency(project.minInvestmentMinor)}</p>
 
-                  {investmentAmount && parseFloat(investmentAmount) >= project.minInvestment && (
+                  {investmentAmount && parseFloat(investmentAmount) * 100 >= project.minInvestmentMinor && (
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4">
                       <p className="text-xs font-medium text-emerald-800 uppercase tracking-wide">
                         Est. annual return
@@ -409,13 +561,73 @@ export default function ProjectDetail() {
                     </div>
                   )}
 
+                  {/* Only a choice when there is one to make. */}
+                  {paymentMethods.length > 1 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Payment method
+                      </p>
+                      <div className="space-y-2">
+                        {paymentMethods.map((m) => {
+                          const active = selectedProvider === m.provider;
+                          return (
+                            <button
+                              key={m.provider}
+                              type="button"
+                              onClick={() => setSelectedProvider(m.provider)}
+                              aria-pressed={active}
+                              className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
+                                active
+                                  ? 'border-emerald-500 bg-emerald-50/60'
+                                  : 'border-slate-200 hover:border-slate-300'
+                              }`}
+                            >
+                              <span
+                                className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                                  active ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
+                                }`}
+                              >
+                                {m.provider === 'MANUAL_WIRE' ? (
+                                  <Landmark className="h-4 w-4" />
+                                ) : (
+                                  <CreditCard className="h-4 w-4" />
+                                )}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-medium text-slate-800">{m.label}</span>
+                                <span className="block text-xs text-slate-500">{m.description}</span>
+                                {/* Settlement speed is the real difference
+                                    between these options, so say it up front. */}
+                                <span
+                                  className={`mt-1 inline-block rounded-md px-1.5 py-0.5 text-[0.6875rem] font-medium ${
+                                    m.settlement === 'instant'
+                                      ? 'bg-emerald-100 text-emerald-700'
+                                      : 'bg-amber-100 text-amber-800'
+                                  }`}
+                                >
+                                  {m.settlement === 'instant'
+                                    ? 'Confirmed instantly'
+                                    : 'Confirmed in 1-3 business days'}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {project.status === 'open' ? (
                     <Button
                       className="h-12 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-base"
                       onClick={() => void handleInvest()}
                       disabled={isSubmitting}
                     >
-                      {isSubmitting ? 'Processing...' : 'Invest now'}
+                      {isSubmitting
+                        ? 'Processing...'
+                        : selectedProvider === 'MANUAL_WIRE'
+                          ? 'Get transfer details'
+                          : 'Invest now'}
                     </Button>
                   ) : (
                     <Button className="h-12 w-full rounded-xl" size="lg" disabled variant="secondary">
@@ -430,6 +642,7 @@ export default function ProjectDetail() {
                   {submitSuccess && <p className="text-center text-xs text-emerald-700">{submitSuccess}</p>}
                   <p className="text-center text-[11px] text-slate-400">Subject to terms and eligibility.</p>
                 </div>
+                )}
               </CardContent>
             </Card>
           </div>

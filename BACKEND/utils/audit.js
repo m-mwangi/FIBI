@@ -73,10 +73,20 @@ function changedFields(before, after) {
         if (from instanceof Date || to instanceof Date) {
             if (String(from) !== String(to)) changes[key] = { from, to };
         } else if (from !== to) {
-            changes[key] = { from, to };
+            changes[key] = { from: jsonSafe(from), to: jsonSafe(to) };
         }
     }
     return Object.keys(changes).length > 0 ? changes : null;
+}
+
+/**
+ * Money columns are BigInt, and the audit metadata lands in a Json column that
+ * goes through JSON.stringify — which throws outright on a BigInt rather than
+ * coercing it. Stringify here so an amount change is recorded rather than
+ * blowing up the very write it is describing.
+ */
+function jsonSafe(value) {
+    return typeof value === 'bigint' ? value.toString() : value;
 }
 
 module.exports = { recordAudit, changedFields };

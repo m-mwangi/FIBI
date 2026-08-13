@@ -121,7 +121,7 @@ export default function Users() {
     return {
       transactions: userTx,
       investments: userInv,
-      invested: userInv.reduce((sum, i) => sum + (i.amountInvested || 0), 0),
+      invested: userInv.reduce((sum, i) => sum + (i.amountInvestedMinor || 0), 0),
     };
   }, [selected, transactions.data, investments.data]);
 
@@ -461,7 +461,7 @@ export default function Users() {
                           </div>
                           <div className="shrink-0 text-right">
                             <p className="adm-num text-sm font-semibold text-slate-800">
-                              {formatCurrency(inv.amountInvested)}
+                              {formatCurrency(inv.amountInvestedMinor)}
                             </p>
                             <StatusPill status={inv.status} />
                           </div>
@@ -490,7 +490,7 @@ export default function Users() {
                           </div>
                           <div className="shrink-0 text-right">
                             <p className="adm-num text-sm font-semibold text-slate-800">
-                              {formatCurrency(t.amount)}
+                              {formatCurrency(t.amountMinor)}
                             </p>
                             <StatusPill status={t.status} />
                           </div>

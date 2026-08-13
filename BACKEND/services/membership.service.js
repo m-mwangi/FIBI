@@ -89,7 +89,7 @@ async function ensureDefaultMembershipPlans() {
       {
         tier: "free",
         name: "Free",
-        monthlyPrice: 0,
+        monthlyPriceMinor: 0n,
         description: "Public platform access and project discovery.",
         features: [],
         sortOrder: 0,
@@ -97,7 +97,7 @@ async function ensureDefaultMembershipPlans() {
       {
         tier: "basic",
         name: "Basic",
-        monthlyPrice: 19,
+        monthlyPriceMinor: 1900n,
         description: "Entry to member ecosystem with starter benefits.",
         features: ["exclusive_content", "member_events", "community_groups"],
         sortOrder: 1,
@@ -105,7 +105,7 @@ async function ensureDefaultMembershipPlans() {
       {
         tier: "premium",
         name: "Premium",
-        monthlyPrice: 59,
+        monthlyPriceMinor: 5900n,
         description: "Advanced benefits, premium services, and priority experiences.",
         features: [
           "exclusive_content",
@@ -120,7 +120,7 @@ async function ensureDefaultMembershipPlans() {
       {
         tier: "investor_plus",
         name: "Investor+",
-        monthlyPrice: 149,
+        monthlyPriceMinor: 14900n,
         description: "Full elite access including premium deal-flow opportunities.",
         features: [
           "exclusive_content",

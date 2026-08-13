@@ -1,234 +1,180 @@
 const { prisma } = require('../config/db');
-const config = require('../config/env');
-const Stripe = require('stripe');
+const { getAdapter } = require('../payments');
+const { recordInvestmentSettled } = require('../services/ledger.service');
 
-// Create Stripe client once (small app / dev).
-const stripe = config.STRIPE_SECRET_KEY ? new Stripe(config.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' }) : null;
+/**
+ * Payment callbacks.
+ *
+ * The route is Stripe-specific because Stripe needs a raw body for signature
+ * verification, but everything below `adapter.handleCallback` is provider
+ * neutral: `settlePayment` is what any future rail's callback — or Phase 3's
+ * reconciliation engine — calls once money is confirmed.
+ */
 
-function getStripeOrThrow() {
-    if (!stripe) {
-        const err = new Error('Stripe is not configured (missing STRIPE_SECRET_KEY).');
-        err.statusCode = 500;
-        throw err;
-    }
-    return stripe;
-}
-
-async function upsertPaymentResponse({ tx, paymentId, providerEventId, eventType, eventData }) {
-    // providerEventId is always an idempotency key from Stripe webhook.
+async function upsertPaymentResponse({ tx, paymentId, provider, providerEventId, eventType, eventData }) {
+    // providerEventId is the provider's own event id, and is unique in the
+    // schema — this is what makes a redelivered webhook a no-op.
     await tx.paymentResponse.upsert({
         where: { providerEventId },
-        create: {
-            paymentId,
-            provider: 'STRIPE',
-            providerEventId,
-            response: eventData,
-            status: eventType,
-        },
-        update: {
-            response: eventData,
-            status: eventType,
-        },
+        create: { paymentId, provider, providerEventId, response: eventData, status: eventType },
+        update: { response: eventData, status: eventType },
     });
 }
 
-async function ensurePaymentMethod({ tx, userId, methodType }) {
-    const existing = await tx.paymentMethod.findFirst({
-        where: { userId, provider: 'STRIPE', methodType },
-    });
+async function ensurePaymentMethod({ tx, userId, provider, methodType }) {
+    const existing = await tx.paymentMethod.findFirst({ where: { userId, provider, methodType } });
     if (existing) return existing;
 
     return tx.paymentMethod.create({
-        data: {
-            userId,
-            provider: 'STRIPE',
-            methodType,
-            label: 'Card',
-            details: { methodType },
-        },
+        data: { userId, provider, methodType, label: methodType === 'card' ? 'Card' : methodType, details: { methodType } },
     });
 }
 
 /**
- * Create Stripe checkout session for an investment.
- * @returns {Promise<{ url: string, id: string }>}
+ * Apply a confirmed payment outcome.
+ *
+ * Provider-agnostic on purpose: a bank statement match in Phase 3 settles a
+ * wire through exactly this path, so the money maths lives in one place rather
+ * than once per rail.
+ *
+ * Everything runs in one transaction, and the ledger entry is part of it — the
+ * books and the projections they describe commit together or not at all.
  */
-const createInvestmentCheckoutSession = async ({
-    userId,
-    projectId,
-    investmentId,
-    paymentId,
-    amount,
-    currency,
-    projectTitle,
-}) => {
-    const s = getStripeOrThrow();
+async function settlePayment(event) {
+    const { paymentId, providerRef, status, eventId, eventType, methodType, raw } = event;
 
-    const unitAmount = Math.round(amount * 100); // USD-like: 2 decimal places expected
-    const frontendBase = (config.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+    await prisma.$transaction(async (tx) => {
+        const payment = paymentId
+            ? await tx.payment.findUnique({ where: { id: paymentId } })
+            : await tx.payment.findFirst({ where: { providerRef } });
 
-    const session = await s.checkout.sessions.create({
-        mode: 'payment',
-        line_items: [
-            {
-                price_data: {
-                    currency,
-                    unit_amount: unitAmount,
-                    product_data: {
-                        name: `Investment in ${projectTitle}`,
-                    },
-                },
-                quantity: 1,
+        if (!payment) return;
+
+        // Idempotency, second line of defence: an already-resolved payment is
+        // never reprocessed even if the same event arrives twice.
+        const OPEN = new Set(['pending', 'awaiting_funds', 'partially_settled']);
+        if (!OPEN.has(payment.status)) return;
+
+        await upsertPaymentResponse({
+            tx,
+            paymentId: payment.id,
+            provider: payment.provider,
+            providerEventId: eventId,
+            eventType,
+            eventData: raw,
+        });
+
+        const settledMinor =
+            event.settledAmountMinor === null || event.settledAmountMinor === undefined
+                ? payment.amountMinor
+                : BigInt(event.settledAmountMinor);
+
+        await tx.payment.updateMany({
+            where: { id: payment.id, status: { in: [...OPEN] } },
+            data: {
+                status,
+                providerRef: providerRef || payment.providerRef,
+                settledAmountMinor: status === 'succeeded' ? settledMinor : payment.settledAmountMinor,
             },
-        ],
-        success_url: `${frontendBase}/dashboard?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${frontendBase}/dashboard?payment=cancel`,
-        metadata: {
-            investmentId,
-            projectId,
-            userId,
-            paymentId,
-        },
-    });
+        });
 
-    return { url: session.url, id: session.id };
-};
+        if (status !== 'succeeded') return;
+
+        const investmentId = payment.investmentId;
+        if (!investmentId) return;
+
+        const updated = await tx.investment.updateMany({
+            where: { id: investmentId, status: 'pending' },
+            data: { status: 'active', currentValueMinor: payment.amountMinor },
+        });
+        // Another delivery of the same event won the race; it did the work.
+        if (updated.count !== 1) return;
+
+        const investment = await tx.investment.findUnique({ where: { id: investmentId } });
+        if (!investment) return;
+
+        const project = await tx.project.findUnique({ where: { id: investment.projectId } });
+        if (!project) return;
+
+        // BigInt arithmetic — the funding total cannot drift from the sum of
+        // its investments.
+        const nextFunding = project.currentFundingMinor + investment.amountInvestedMinor;
+        const nextStatus = nextFunding >= project.totalFundingMinor ? 'funded' : project.status;
+
+        const alreadyInvested = await tx.investment.findFirst({
+            where: {
+                userId: investment.userId,
+                projectId: investment.projectId,
+                status: { in: ['active', 'completed'] },
+                id: { not: investment.id },
+            },
+            select: { id: true },
+        });
+
+        if (methodType) {
+            const pm = await ensurePaymentMethod({
+                tx,
+                userId: investment.userId,
+                provider: payment.provider,
+                methodType,
+            });
+            await tx.payment.update({ where: { id: payment.id }, data: { paymentMethodId: pm.id } });
+        }
+
+        await tx.project.update({
+            where: { id: investment.projectId },
+            data: {
+                currentFundingMinor: { increment: investment.amountInvestedMinor },
+                investorsCount: alreadyInvested ? project.investorsCount : { increment: 1 },
+                status: nextStatus,
+            },
+        });
+
+        await tx.transaction.create({
+            data: {
+                userId: investment.userId,
+                amountMinor: investment.amountInvestedMinor,
+                currency: investment.currency,
+                type: 'INVESTMENT',
+                status: 'completed',
+                paymentId: payment.id,
+            },
+        });
+
+        // The books. Keyed on the provider event id, so a replay cannot double
+        // post even if every guard above were removed.
+        await recordInvestmentSettled(tx, {
+            idempotencyKey: `investment-settled:${eventId}`,
+            userId: investment.userId,
+            projectId: investment.projectId,
+            amountMinor: investment.amountInvestedMinor,
+            currency: investment.currency,
+            paymentId: payment.id,
+            occurredAt: new Date(),
+        });
+    });
+}
 
 /**
- * Stripe webhook handler for investment payments.
- * Note: `index.js` registers this route with `express.raw()` so `req.body` is a Buffer.
+ * Stripe webhook.
+ *
+ * `index.js` mounts this with `express.raw()` — the signature is computed over
+ * the raw bytes, so parsing the body first would invalidate it.
  */
 const stripeWebhook = async (req, res) => {
     try {
-        const s = getStripeOrThrow();
-        if (!config.STRIPE_WEBHOOK_SECRET) {
-            return res.status(500).json({ error: 'Stripe webhook secret is missing (STRIPE_WEBHOOK_SECRET).' });
+        const adapter = getAdapter('STRIPE');
+        const event = await adapter.handleCallback(req);
+
+        // A valid but uninteresting event type. Acknowledge it, or Stripe
+        // retries forever.
+        if (!event) return res.status(200).json({ received: true, ignored: true });
+
+        if (!event.paymentId && !event.providerRef) {
+            return res.status(400).json({ error: 'Callback has no payment reference.' });
         }
 
-        const signatureHeader = req.headers['stripe-signature'];
-        const signature = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
-        if (!signature) {
-            return res.status(400).json({ error: 'Missing stripe-signature header.' });
-        }
-
-        const event = s.webhooks.constructEvent(req.body, signature, config.STRIPE_WEBHOOK_SECRET);
-
-        const allowedTypes = new Set([
-            'checkout.session.completed',
-            'checkout.session.async_payment_failed',
-            'checkout.session.expired',
-        ]);
-
-        if (!allowedTypes.has(event.type)) {
-            return res.status(200).json({ received: true, type: event.type });
-        }
-
-        const session = event.data.object;
-        const paymentId = session?.metadata?.paymentId;
-        const investmentIdFromMeta = session?.metadata?.investmentId;
-
-        if (!paymentId) {
-            return res.status(400).json({ error: 'Missing paymentId in Stripe session metadata.' });
-        }
-
-        await prisma.$transaction(async (tx) => {
-            const payment = await tx.payment.findUnique({
-                where: { id: paymentId },
-            });
-            if (!payment) return;
-
-            // Idempotency: only process if still pending.
-            if (payment.status !== 'pending') return;
-
-            const providerEventId = event.id;
-            await upsertPaymentResponse({
-                tx,
-                paymentId,
-                providerEventId,
-                eventType: event.type,
-                eventData: event.data,
-            });
-
-            const sessionPaymentStatus = session?.payment_status;
-            const methodType = Array.isArray(session?.payment_method_types) && session.payment_method_types.length > 0
-                ? session.payment_method_types[0]
-                : 'card';
-
-            const nextPaymentStatus =
-                event.type === 'checkout.session.completed' && sessionPaymentStatus === 'paid'
-                    ? 'succeeded'
-                    : 'failed';
-
-            // Update payment first; finalization below only happens on success.
-            await tx.payment.updateMany({
-                where: { id: paymentId, status: 'pending' },
-                data: {
-                    status: nextPaymentStatus,
-                    stripeCheckoutSessionId: session.id,
-                },
-            });
-
-            if (nextPaymentStatus !== 'succeeded') return;
-
-            const investmentId = payment.investmentId || investmentIdFromMeta;
-            if (!investmentId) return;
-
-            const updatedInvestmentCount = await tx.investment.updateMany({
-                where: { id: investmentId, status: 'pending' },
-                data: {
-                    status: 'active',
-                    currentValue: payment.amount,
-                },
-            });
-
-            if (updatedInvestmentCount.count !== 1) return;
-
-            const pendingInvestment = await tx.investment.findUnique({ where: { id: investmentId } });
-            if (!pendingInvestment) return;
-
-            const projectRecord = await tx.project.findUnique({ where: { id: pendingInvestment.projectId } });
-            if (!projectRecord) return;
-
-            const nextFunding = projectRecord.currentFunding + pendingInvestment.amountInvested;
-            const nextStatus = nextFunding >= projectRecord.totalFunding ? 'funded' : projectRecord.status;
-
-            const existingFinalizedInvestor = await tx.investment.findFirst({
-                where: {
-                    userId: pendingInvestment.userId,
-                    projectId: pendingInvestment.projectId,
-                    status: { in: ['active', 'completed'] },
-                    // Exclude the investment we are currently finalizing.
-                    id: { not: pendingInvestment.id },
-                },
-                select: { id: true },
-            });
-
-            const pm = await ensurePaymentMethod({ tx, userId: pendingInvestment.userId, methodType });
-            await tx.payment.update({
-                where: { id: paymentId },
-                data: { paymentMethodId: pm.id },
-            });
-
-            await tx.project.update({
-                where: { id: pendingInvestment.projectId },
-                data: {
-                    currentFunding: { increment: pendingInvestment.amountInvested },
-                    investorsCount: existingFinalizedInvestor ? projectRecord.investorsCount : { increment: 1 },
-                    status: nextStatus,
-                },
-            });
-
-            await tx.transaction.create({
-                data: {
-                    userId: pendingInvestment.userId,
-                    amount: pendingInvestment.amountInvested,
-                    type: 'INVESTMENT',
-                    status: 'completed',
-                    paymentId: paymentId,
-                },
-            });
-        });
-
+        await settlePayment(event);
         res.status(200).json({ received: true });
     } catch (error) {
         console.error('Stripe webhook error:', error?.message || error);
@@ -237,7 +183,6 @@ const stripeWebhook = async (req, res) => {
 };
 
 module.exports = {
-    createInvestmentCheckoutSession,
     stripeWebhook,
+    settlePayment,
 };
-

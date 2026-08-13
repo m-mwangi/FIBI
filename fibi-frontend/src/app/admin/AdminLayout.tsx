@@ -7,6 +7,7 @@ import {
   ChevronsRight,
   ExternalLink,
   FolderOpen,
+  Landmark,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -71,7 +72,10 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
   {
     label: 'Configure',
-    items: [{ to: '/admin/settings', label: 'Settings', icon: SettingsIcon }],
+    items: [
+      { to: '/admin/banking', label: 'Banking', icon: Landmark },
+      { to: '/admin/settings', label: 'Settings', icon: SettingsIcon },
+    ],
   },
 ];
 

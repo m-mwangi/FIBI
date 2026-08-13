@@ -81,7 +81,7 @@ export default function Transactions() {
   const totals = useMemo(() => {
     const completed = transactions.data.filter((t) => t.status === 'completed');
     const sum = (type: string) =>
-      completed.filter((t) => t.type === type).reduce((acc, t) => acc + (t.amount || 0), 0);
+      completed.filter((t) => t.type === type).reduce((acc, t) => acc + (t.amountMinor || 0), 0);
     const deposits = sum('DEPOSIT');
     const withdrawals = sum('WITHDRAWAL');
     return {
@@ -119,7 +119,7 @@ export default function Transactions() {
       netFlowPerMonth(
         transactions.data.filter((t) => t.status === 'completed'),
         (t) => t.createdAt,
-        (t) => t.amount,
+        (t) => t.amountMinor,
         (t) => (TYPE_META[t.type]?.inflow ? 1 : -1),
         6
       ),
@@ -137,7 +137,7 @@ export default function Transactions() {
         t.user?.name ?? '',
         t.user?.email ?? '',
         t.type,
-        t.amount,
+        t.amountMinor,
         t.status,
       ]
         .map(csvEscape)
@@ -199,7 +199,7 @@ export default function Transactions() {
     {
       key: 'amount',
       header: 'Amount',
-      sortValue: (t) => t.amount,
+      sortValue: (t) => t.amountMinor,
       headerClassName: 'text-right',
       className: 'text-right',
       cell: (t) => {
@@ -211,7 +211,7 @@ export default function Transactions() {
             }`}
           >
             {inflow ? '+' : '−'}
-            {formatCurrency(t.amount)}
+            {formatCurrency(t.amountMinor)}
           </span>
         );
       },

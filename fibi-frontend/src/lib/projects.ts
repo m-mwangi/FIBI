@@ -21,9 +21,10 @@ export type ApiProject = {
   title: string;
   location: string;
   category: string;
-  minInvestment: number;
-  totalFunding: number;
-  currentFunding: number;
+  minInvestmentMinor: number;
+  totalFundingMinor: number;
+  currentFundingMinor: number;
+  currency: string;
   investorsCount: number;
   projectedROI: number;
   payoutFrequency: string;
@@ -82,9 +83,10 @@ export function normalizeApiProject(raw: ApiProject): Project {
     title: raw.title,
     location: raw.location,
     category: raw.category,
-    minInvestment: Number(raw.minInvestment),
-    totalFunding: Number(raw.totalFunding),
-    currentFunding: Number(raw.currentFunding),
+    minInvestmentMinor: Number(raw.minInvestmentMinor),
+    totalFundingMinor: Number(raw.totalFundingMinor),
+    currentFundingMinor: Number(raw.currentFundingMinor),
+    currency: raw.currency || 'USD',
     investors: Number(raw.investorsCount ?? 0),
     projectedROI: Number(raw.projectedROI),
     payoutFrequency: raw.payoutFrequency,

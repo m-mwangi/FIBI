@@ -18,6 +18,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useAdminData } from '../lib/AdminDataContext';
 import { SETTINGS_API, type GlobalSettingsDTO } from '../lib/types';
 import { Flash, PageHeader, Panel, Skeleton } from '../components/primitives';
+import { majorToMinor, minorToMajor } from '../lib/format';
 import { AuditFeed } from '../components/AuditFeed';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -200,7 +201,7 @@ export default function Settings() {
       setFlash({ type: 'err', text: 'Platform name is required.' });
       return;
     }
-    if (form.maxInvestment > 0 && form.minInvestment > form.maxInvestment) {
+    if (form.maxInvestmentMinor > 0 && form.minInvestmentMinor > form.maxInvestmentMinor) {
       setFlash({ type: 'err', text: 'Minimum investment cannot exceed the maximum.' });
       return;
     }
@@ -360,21 +361,31 @@ export default function Settings() {
           <div id="investment" className="scroll-mt-24">
             <Panel title="Investment rules" description="Limits applied to every project">
               <div className="grid gap-4 sm:grid-cols-3">
-                <Field id="s-min" label="Minimum investment">
+                {/* Displayed in major units because that is what an operator
+                    thinks in; stored and sent as minor units. majorToMinor
+                    rounds, so a stray "100.005" cannot create a fractional
+                    cent. */}
+                <Field id="s-min" label={`Minimum investment (${form.currency})`}>
                   <Input
                     id="s-min"
                     type="number"
-                    value={form.minInvestment}
-                    onChange={(e) => set('minInvestment', Number(e.target.value))}
+                    step="0.01"
+                    value={minorToMajor(form.minInvestmentMinor, form.currency)}
+                    onChange={(e) =>
+                      set('minInvestmentMinor', majorToMinor(e.target.value, form.currency))
+                    }
                     className={inputClass}
                   />
                 </Field>
-                <Field id="s-max" label="Maximum investment">
+                <Field id="s-max" label={`Maximum investment (${form.currency})`}>
                   <Input
                     id="s-max"
                     type="number"
-                    value={form.maxInvestment}
-                    onChange={(e) => set('maxInvestment', Number(e.target.value))}
+                    step="0.01"
+                    value={minorToMajor(form.maxInvestmentMinor, form.currency)}
+                    onChange={(e) =>
+                      set('maxInvestmentMinor', majorToMinor(e.target.value, form.currency))
+                    }
                     className={inputClass}
                   />
                 </Field>

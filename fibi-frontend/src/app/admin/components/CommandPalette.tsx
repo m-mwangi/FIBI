@@ -157,7 +157,7 @@ export function CommandPalette({
                   <ChartColumn className="h-4 w-4 text-slate-400" />
                   <span className="truncate">{t.user?.name ?? 'Unknown'}</span>
                   <span className="adm-num ml-auto pl-3 text-xs text-slate-400">
-                    {formatCurrency(t.amount)} · {formatDate(t.createdAt)}
+                    {formatCurrency(t.amountMinor)} · {formatDate(t.createdAt)}
                   </span>
                 </CommandItem>
               ))}

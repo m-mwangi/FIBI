@@ -1,22 +1,59 @@
 /** Shared formatters so every admin surface renders numbers and dates identically. */
 
-export function formatCurrency(amount: number, currency = 'USD'): string {
+/**
+ * Minor units per major unit. Mirrors BACKEND/utils/money.js — the two must
+ * agree, or a JPY amount renders 100x wrong on one side of the wire.
+ */
+const CURRENCY_EXPONENT: Record<string, number> = {
+  USD: 2, KES: 2, EUR: 2, GBP: 2, SGD: 2, ZAR: 2,
+  JPY: 0, KRW: 0, UGX: 0, RWF: 0,
+};
+
+/**
+ * Convert integer minor units to a major-unit number for display only.
+ *
+ * The API sends money as integer minor units (cents) so the client never does
+ * decimal arithmetic. Sum first, divide last: dividing early puts every
+ * subtotal back into floating point, which is the drift this whole change
+ * removes.
+ */
+export function minorToMajor(minorUnits: number, currency = 'USD'): number {
+  const exponent = CURRENCY_EXPONENT[currency.toUpperCase()] ?? 2;
+  return (Number.isFinite(minorUnits) ? minorUnits : 0) / 10 ** exponent;
+}
+
+/**
+ * Convert a major-unit form input ("500", "12.34") to integer minor units.
+ *
+ * The inverse of `minorToMajor`, used only where an operator types an amount.
+ * Rounds, so a stray extra decimal cannot produce a fractional cent that the
+ * backend would then reject.
+ */
+export function majorToMinor(value: string | number, currency = 'USD'): number {
+  const exponent = CURRENCY_EXPONENT[currency.toUpperCase()] ?? 2;
+  const major = typeof value === 'number' ? value : Number.parseFloat(value);
+  if (!Number.isFinite(major)) return 0;
+  return Math.round(major * 10 ** exponent);
+}
+
+/** Format integer MINOR units as currency — e.g. 173500000 -> "$1,735,000". */
+export function formatCurrency(minorUnits: number, currency = 'USD'): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(Number.isFinite(amount) ? amount : 0);
+  }).format(minorToMajor(minorUnits, currency));
 }
 
 /** Compact form for chart axes, where "$1.8M" fits and "$1,800,000" does not. */
-export function formatCompact(amount: number, currency = 'USD'): string {
+export function formatCompact(minorUnits: number, currency = 'USD'): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
     notation: 'compact',
     maximumFractionDigits: 1,
-  }).format(Number.isFinite(amount) ? amount : 0);
+  }).format(minorToMajor(minorUnits, currency));
 }
 
 export function formatNumber(value: number): string {

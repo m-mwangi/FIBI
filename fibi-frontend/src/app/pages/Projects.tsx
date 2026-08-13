@@ -63,9 +63,10 @@ export default function Projects() {
     return () => window.clearInterval(id);
   }, [withFade]);
 
-  const formatCurrency = (n: number) =>
+  // Takes integer MINOR units (cents), matching the API.
+  const formatCurrency = (minorUnits: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(
-      n
+      minorUnits / 100
     );
 
   const categoryLabel = (c: string) =>
@@ -170,8 +171,8 @@ export default function Projects() {
         <div className="grid gap-6 sm:gap-8 md:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => {
             const pct =
-              project.totalFunding > 0
-                ? Math.min(100, (project.currentFunding / project.totalFunding) * 100)
+              project.totalFundingMinor > 0
+                ? Math.min(100, (project.currentFundingMinor / project.totalFundingMinor) * 100)
                 : 0;
             return (
               <Card
@@ -219,14 +220,14 @@ export default function Projects() {
                       className="h-2.5 bg-slate-100 [&>[data-slot=progress-indicator]]:bg-emerald-600"
                     />
                     <div className="mt-1.5 flex justify-between text-xs text-slate-500">
-                      <span>{formatCurrency(project.currentFunding)} raised</span>
-                      <span>{formatCurrency(project.totalFunding)} goal</span>
+                      <span>{formatCurrency(project.currentFundingMinor)} raised</span>
+                      <span>{formatCurrency(project.totalFundingMinor)} goal</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 border-t border-slate-100 pt-3 text-sm text-slate-600">
                     <Calendar className="h-4 w-4 text-slate-400" />
                     Min.{' '}
-                    <span className="font-semibold text-slate-900">{formatCurrency(project.minInvestment)}</span>
+                    <span className="font-semibold text-slate-900">{formatCurrency(project.minInvestmentMinor)}</span>
                   </div>
                   <Link to={`/projects/${project.id}`} className="block">
                     <Button className="h-11 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700">View details</Button>

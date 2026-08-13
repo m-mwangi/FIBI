@@ -12,7 +12,7 @@ function normalizeTransactionType(type) {
 const createTransaction = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { amount, type } = req.body;
+        const { amountMinor, type } = req.body;
 
         const normalizedType = normalizeTransactionType(type);
         if (!normalizedType || !MANUAL_TYPES.has(normalizedType)) {
@@ -21,9 +21,14 @@ const createTransaction = async (req, res) => {
             });
         }
 
-        const parsedAmount = Number(amount);
-        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-            return res.status(400).json({ error: 'Amount must be a positive number' });
+        // Integer MINOR units (cents). The `Minor` suffix means a client still
+        // posting major-unit `amount` gets a 400 rather than a transaction 100x
+        // too small.
+        const parsedAmount = Number(amountMinor);
+        if (!Number.isSafeInteger(parsedAmount) || parsedAmount <= 0) {
+            return res.status(400).json({
+                error: 'amountMinor must be a positive integer in minor units (cents)',
+            });
         }
 
         const globalSettings = await prisma.settings.findUnique({ where: { id: 'global' } });
@@ -37,7 +42,8 @@ const createTransaction = async (req, res) => {
         const transaction = await prisma.transaction.create({
             data: {
                 userId,
-                amount: parsedAmount,
+                amountMinor: BigInt(parsedAmount),
+                currency: (globalSettings?.currency || 'USD').toUpperCase(),
                 type: normalizedType,
                 status: 'completed',
             },

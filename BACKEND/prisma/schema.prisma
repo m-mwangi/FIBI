@@ -78,14 +78,45 @@ enum TransactionStatus {
 // PAYMENT ENUMS (STRIPE / OTHER PROVIDERS)
 //////////////////////////////////////////////////////
 
+// One member per collection rail. Custody institutions (Morgan Stanley,
+// Bank of Singapore) are deliberately absent: they hold funds, they do not
+// accept payments, so they can never be a payment provider. See PAYMENTS.md §2.
 enum PaymentProvider {
   STRIPE
+  MANUAL_WIRE
+  MPESA
+  ABSA
+  SBM
+  STANCHART
 }
 
+// Slow rails need states a card payment never has. A wire sits in
+// `awaiting_funds` for days, and may land short of the expected amount, so
+// `partially_settled` has to be representable rather than rounded to
+// succeeded/failed.
 enum PaymentStatus {
   pending
+  awaiting_funds
+  partially_settled
   succeeded
   failed
+  reversed
+}
+
+// Which of the client's institutions an account belongs to. Custody entries are
+// read-only holdings; collection entries can appear on wire instructions.
+enum BankInstitution {
+  SBM
+  ABSA
+  STANCHART
+  MORGAN_STANLEY
+  BANK_OF_SINGAPORE
+  OTHER
+}
+
+enum BankAccountPurpose {
+  COLLECTION
+  CUSTODY
 }
 
 //////////////////////////////////////////////////////
@@ -163,6 +194,110 @@ model User {
 }
 
 //////////////////////////////////////////////////////
+// BANK ACCOUNTS
+//////////////////////////////////////////////////////
+
+// The real-world accounts behind the platform: where investor money is
+// collected, and where pooled funds are custodied.
+//
+// A row rather than config so an operator can add a bank without a deploy, and
+// so wire instructions always quote the account that actually matches the
+// investor's currency.
+model BankAccount {
+  id            String             @id @default(uuid())
+  label         String
+  institution   BankInstitution
+  purpose       BankAccountPurpose @default(COLLECTION)
+  bankName      String
+  accountName   String
+  accountNumber String
+  swiftCode     String?
+  branch        String?
+  // ISO-4217. An account holds one currency; a bank offering both KES and USD
+  // is two rows, matching how the bank actually operates them.
+  currency      String
+  instructions  String?
+  active        Boolean            @default(true)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  // At most one active collection account per currency, so wire instructions
+  // are never ambiguous about where to send money.
+  @@index([currency, purpose, active])
+}
+
+//////////////////////////////////////////////////////
+// LEDGER (double-entry, append-only)
+//////////////////////////////////////////////////////
+
+// What kind of money an account holds. Escrow is deliberately separate from
+// platform accounts: investor funds are client money and must never be
+// commingled with operating funds.
+enum LedgerAccountType {
+  INVESTOR_WALLET
+  PROJECT_ESCROW
+  PLATFORM_FEE
+  BANK_SETTLEMENT
+  FX_SUSPENSE
+  CUSTODY
+}
+
+// An account holds exactly one currency. A multi-currency balance is two
+// accounts, never one account with a mixed total.
+model LedgerAccount {
+  id          String            @id @default(uuid())
+  type        LedgerAccountType
+  currency    String
+  // User id or project id depending on `type`; null for platform-level accounts.
+  ownerId     String?
+  // Bank account reference where this maps to a real external account.
+  externalRef String?
+  createdAt   DateTime          @default(now())
+
+  postings LedgerPosting[]
+
+  // One account per (type, owner, currency) — prevents a second USD escrow
+  // account quietly appearing for the same project and splitting its balance.
+  @@unique([type, ownerId, currency])
+  @@index([ownerId])
+}
+
+// One balanced financial event. Postings within an entry sum to zero per
+// currency; this is enforced in application code and asserted in tests.
+//
+// Append-only: entries and postings are never updated or deleted. A correction
+// is a new reversing entry. That is what makes the ledger auditable.
+model JournalEntry {
+  id             String   @id @default(uuid())
+  // Natural key from the source event (Stripe event id, statement line hash).
+  // Unique, so replaying a webhook cannot post the same money twice.
+  idempotencyKey String   @unique
+  description    String
+  occurredAt     DateTime
+  createdAt      DateTime @default(now())
+  paymentId      String?
+
+  postings LedgerPosting[]
+
+  @@index([occurredAt])
+}
+
+model LedgerPosting {
+  id        String @id @default(uuid())
+  entryId   String
+  accountId String
+  // Signed integer MINOR units. Debits positive, credits negative.
+  amount    BigInt
+  currency  String
+
+  entry   JournalEntry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  account LedgerAccount @relation(fields: [accountId], references: [id])
+
+  @@index([accountId])
+  @@index([entryId])
+}
+
+//////////////////////////////////////////////////////
 // ADMIN AUDIT LOG
 //////////////////////////////////////////////////////
 
@@ -229,10 +364,17 @@ model Project {
   title           String
   location        String
   category        String
-  minInvestment   Float
-  totalFunding    Float
-  currentFunding  Float    @default(0)
+  // Money: integer MINOR units (cents). See utils/money.js.
+  // The `Minor` suffix is deliberate — a caller still reading the old `Float`
+  // name gets `undefined` and fails loudly, rather than silently rendering a
+  // value 100x wrong.
+  minInvestmentMinor  BigInt
+  totalFundingMinor   BigInt
+  currentFundingMinor BigInt @default(0)
+  // ISO-4217. Every amount carries its own currency; there is no global default.
+  currency        String   @default("USD")
   investorsCount  Int      @default(0)
+  // A percentage, not money — stays Float.
   projectedROI    Float
   payoutFrequency String
   fundingDeadline DateTime
@@ -283,10 +425,12 @@ model Investment {
   id             String   @id @default(uuid())
   userId         String
   projectId      String
-  amountInvested Float
-  currentValue   Float?
-  totalReturns   Float?   @default(0)
-  
+  // Money: integer MINOR units. See utils/money.js.
+  amountInvestedMinor BigInt
+  currentValueMinor   BigInt?
+  totalReturnsMinor   BigInt?  @default(0)
+  currency            String   @default("USD")
+
   // ENUM USED HERE
   status         InvestmentStatus @default(active)
   investmentDate DateTime @default(now())
@@ -306,7 +450,9 @@ model Investment {
 model Transaction {
   id        String   @id @default(uuid())
   userId    String // FOREIGN KEY TO USER TABLE ID
-  amount    Float
+  // Money: integer MINOR units. See utils/money.js.
+  amountMinor BigInt
+  currency  String   @default("USD")
   // ENUMS USED HERE
   type      TransactionType   // deposit, withdrawal, etc.
   status    TransactionStatus @default(pending) //pending, completed, failed
@@ -349,12 +495,21 @@ model Payment {
   provider PaymentProvider
   status PaymentStatus @default(pending)
 
-  amount Float
+  // Money: integer MINOR units. See utils/money.js.
+  amountMinor BigInt
   currency String @default("USD")
 
-  // Stripe identifiers (if provider=STRIPE)
-  stripeCheckoutSessionId String?
-  stripePaymentIntentId   String?
+  // Provider-agnostic identity. `providerRef` is whatever that rail calls its
+  // handle (Stripe session id, wire reference, M-Pesa checkout id); everything
+  // else the rail returns goes in `providerMeta`. Previously these were two
+  // Stripe-named columns on the shared table, which meant every new provider
+  // added more nullable columns nobody else used.
+  providerRef  String?
+  providerMeta Json?
+
+  // How much has actually settled, for rails that can land short of the ask.
+  // Equals `amountMinor` on a clean settlement.
+  settledAmountMinor BigInt @default(0)
 
   paymentMethodId String?
 
@@ -399,8 +554,10 @@ model Settings {
   platformName         String   @default("FIBI")
   supportEmail         String   @default("support@fibi.com")
   contactPhone         String   @default("+254 700 000 000")
-  minInvestment        Float    @default(100)
-  maxInvestment        Float    @default(50000)
+  // Money: integer MINOR units. See utils/money.js.
+  minInvestmentMinor   BigInt   @default(10000)
+  maxInvestmentMinor   BigInt   @default(5000000)
+  // Percentages, not money — stay Float.
   platformFee          Float    @default(2)
   currency             String   @default("USD")
   depositsEnabled      Boolean  @default(true)
@@ -456,7 +613,9 @@ model MembershipPlan {
   id           String           @id @default(uuid())
   tier         MembershipTier   @unique
   name         String
-  monthlyPrice Float
+  // Money: integer MINOR units. See utils/money.js.
+  monthlyPriceMinor BigInt
+  currency     String           @default("USD")
   description  String
   features     Json             @default("[]")
   active       Boolean          @default(true)

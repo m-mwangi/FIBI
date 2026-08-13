@@ -12,6 +12,7 @@ import AdminTransactions from './admin/sections/Transactions';
 import AdminAnalytics from './admin/sections/Analytics';
 import AdminMemberships from './admin/sections/Memberships';
 import AdminSettings from './admin/sections/Settings';
+import AdminBanking from './admin/sections/Banking';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import ForgotPassword from './pages/ForgotPassword';
@@ -74,6 +75,7 @@ export const router = createBrowserRouter([
           { path: 'transactions', Component: AdminTransactions },
           { path: 'analytics', Component: AdminAnalytics },
           { path: 'memberships', Component: AdminMemberships },
+          { path: 'banking', Component: AdminBanking },
           { path: 'settings', Component: AdminSettings },
         ],
       },

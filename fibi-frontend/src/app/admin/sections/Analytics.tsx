@@ -78,7 +78,7 @@ export default function Analytics() {
       cumulativeSumByMonth(
         completedInvestments,
         (t) => t.createdAt,
-        (t) => t.amount,
+        (t) => t.amountMinor,
         months
       ),
     [completedInvestments, months]
@@ -90,7 +90,7 @@ export default function Analytics() {
       sumPerMonth(
         completedInvestments,
         (t) => t.createdAt,
-        (t) => t.amount,
+        (t) => t.amountMinor,
         months
       ),
     [completedInvestments, months]
@@ -99,8 +99,8 @@ export default function Analytics() {
   const byProject = useMemo(
     () =>
       [...projects.data]
-        .filter((p) => p.currentFunding > 0)
-        .sort((a, b) => b.currentFunding - a.currentFunding)
+        .filter((p) => p.currentFundingMinor > 0)
+        .sort((a, b) => b.currentFundingMinor - a.currentFundingMinor)
         .slice(0, 8),
     [projects.data]
   );
@@ -110,7 +110,7 @@ export default function Analytics() {
       sumByKey(
         projects.data,
         (p) => p.category,
-        (p) => p.currentFunding
+        (p) => p.currentFundingMinor
       ).filter((d) => d.value > 0),
     [projects.data]
   );
@@ -138,10 +138,10 @@ export default function Analytics() {
     ];
   }, [users.data, investments.data]);
 
-  const totalRaised = projects.data.reduce((sum, p) => sum + p.currentFunding, 0);
+  const totalRaised = projects.data.reduce((sum, p) => sum + p.currentFundingMinor, 0);
   const avgInvestment =
     investments.data.length > 0
-      ? investments.data.reduce((sum, i) => sum + (i.amountInvested || 0), 0) /
+      ? investments.data.reduce((sum, i) => sum + (i.amountInvestedMinor || 0), 0) /
         investments.data.length
       : 0;
 
@@ -314,12 +314,12 @@ export default function Analytics() {
                   <div className="mb-1.5 flex items-baseline justify-between gap-3">
                     <span className="truncate text-sm font-medium text-slate-800">{p.title}</span>
                     <span className="adm-num shrink-0 text-sm font-semibold text-slate-900">
-                      {formatCompact(p.currentFunding)}
+                      {formatCompact(p.currentFundingMinor)}
                     </span>
                   </div>
-                  <FundingBar current={p.currentFunding} total={p.totalFunding} showLabel={false} />
+                  <FundingBar current={p.currentFundingMinor} total={p.totalFundingMinor} showLabel={false} />
                   <p className="adm-num mt-1 text-xs text-slate-400">
-                    of {formatCompact(p.totalFunding)} target · {p.location}
+                    of {formatCompact(p.totalFundingMinor)} target · {p.location}
                   </p>
                 </li>
               ))}

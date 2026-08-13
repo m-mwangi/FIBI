@@ -5,9 +5,13 @@ export interface Project {
   title: string;
   location: string;
   category: string;
-  minInvestment: number;
-  totalFunding: number;
-  currentFunding: number;
+  // Money: integer MINOR units (cents), matching the API. The `Minor` suffix
+  // makes a missed call site fail loudly instead of rendering 100x wrong.
+  minInvestmentMinor: number;
+  totalFundingMinor: number;
+  currentFundingMinor: number;
+  /** ISO-4217 code this project is denominated in. */
+  currency: string;
   investors: number;
   projectedROI: number;
   payoutFrequency: string;
@@ -26,9 +30,10 @@ export const projects: Project[] = [
     title: 'Capsule Houses Eco-Lodge',
     location: 'Kirinyaga, Kenya',
     category: 'eco-lodge',
-    minInvestment: 500,
-    totalFunding: 450000,
-    currentFunding: 315000,
+    minInvestmentMinor: 50000,
+    totalFundingMinor: 45000000,
+    currentFundingMinor: 31500000,
+    currency: 'USD',
     investors: 142,
     projectedROI: 12.5,
     payoutFrequency: 'Monthly',
@@ -70,9 +75,10 @@ export const projects: Project[] = [
     title: 'Solar Roofs Initiative',
     location: 'Kenya',
     category: 'solar-roof',
-    minInvestment: 1000,
-    totalFunding: 1200000,
-    currentFunding: 960000,
+    minInvestmentMinor: 100000,
+    totalFundingMinor: 120000000,
+    currentFundingMinor: 96000000,
+    currency: 'USD',
     investors: 218,
     projectedROI: 9.8,
     payoutFrequency: 'Quarterly',
@@ -101,9 +107,10 @@ export const projects: Project[] = [
     title: 'Mt. Kenya Avocado Farm',
     location: 'Nyeri County, Kenya',
     category: 'agriculture',
-    minInvestment: 750,
-    totalFunding: 650000,
-    currentFunding: 455000,
+    minInvestmentMinor: 75000,
+    totalFundingMinor: 65000000,
+    currentFundingMinor: 45500000,
+    currency: 'USD',
     investors: 176,
     projectedROI: 14.3,
     payoutFrequency: 'Monthly',

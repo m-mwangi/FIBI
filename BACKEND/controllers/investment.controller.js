@@ -1,22 +1,42 @@
 const { prisma } = require('../config/db');
-const { createInvestmentCheckoutSession } = require('./stripe.controller');
+const { getAdapter, usableProviders } = require('../payments');
+const { money, format } = require('../utils/money');
 
 const createInvestment = async (req, res) => {
+    // Hoisted so the catch block can format minor-unit amounts carried out of
+    // the transaction on error messages.
+    let currency = 'USD';
+
     try {
         const userId = req.user.id;
-        const { projectId, amountInvested } = req.body;
-        const parsedAmount = Number(amountInvested);
+        // Amount arrives as integer MINOR units (cents). The `Minor` suffix is
+        // load-bearing: a client still posting major-unit `amountInvested` gets
+        // a 400 rather than an investment 100x too small.
+        // `provider` selects the rail. Defaults to Stripe so existing clients
+        // keep working unchanged.
+        const { projectId, amountInvestedMinor, provider = 'STRIPE' } = req.body;
 
-        if (!projectId || amountInvested === undefined || amountInvested === null) {
-            return res.status(400).json({ error: 'Project ID and amount are required' });
+        if (!projectId || amountInvestedMinor === undefined || amountInvestedMinor === null) {
+            return res.status(400).json({ error: 'Project ID and amountInvestedMinor are required' });
         }
 
-        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-            return res.status(400).json({ error: 'Investment amount must be a valid positive number' });
+        const parsedAmount = Number(amountInvestedMinor);
+        if (!Number.isSafeInteger(parsedAmount) || parsedAmount <= 0) {
+            return res.status(400).json({
+                error: 'amountInvestedMinor must be a positive integer in minor units (cents)',
+            });
+        }
+
+        const available = usableProviders();
+        if (!available.includes(provider)) {
+            return res.status(400).json({
+                error: `Unsupported payment provider "${provider}". Available: ${available.join(', ')}`,
+            });
         }
 
         const settings = await prisma.settings.findUnique({ where: { id: 'global' } });
-        const currency = (settings?.currency || 'USD').toUpperCase();
+        currency = (settings?.currency || 'USD').toUpperCase();
+        const amount = money(BigInt(parsedAmount), currency);
 
         const { investment, payment, projectRecord } = await prisma.$transaction(async (tx) => {
             const projectRecord = await tx.project.findUnique({ where: { id: projectId } });
@@ -32,12 +52,19 @@ const createInvestment = async (req, res) => {
                 throw new Error('FUNDING_DEADLINE_PASSED');
             }
 
-            if (parsedAmount < projectRecord.minInvestment) {
-                throw new Error(`MIN_INVESTMENT:${projectRecord.minInvestment}`);
+            // An investment must be in the project's currency; mixing them is a
+            // bug, not something to paper over with an implicit conversion.
+            if (projectRecord.currency !== currency) {
+                throw new Error(`CURRENCY_MISMATCH:${projectRecord.currency}`);
             }
 
-            const remainingFunding = projectRecord.totalFunding - projectRecord.currentFunding;
-            if (parsedAmount > remainingFunding) {
+            // BigInt comparisons throughout — no float enters the funding maths.
+            if (amount.amount < projectRecord.minInvestmentMinor) {
+                throw new Error(`MIN_INVESTMENT:${projectRecord.minInvestmentMinor}`);
+            }
+
+            const remainingFunding = projectRecord.totalFundingMinor - projectRecord.currentFundingMinor;
+            if (amount.amount > remainingFunding) {
                 throw new Error(`EXCEEDS_REMAINING:${remainingFunding}`);
             }
 
@@ -45,8 +72,9 @@ const createInvestment = async (req, res) => {
                 data: {
                     userId,
                     projectId,
-                    amountInvested: parsedAmount,
-                    currentValue: null,
+                    amountInvestedMinor: amount.amount,
+                    currentValueMinor: null,
+                    currency,
                     status: 'pending',
                 },
             });
@@ -56,9 +84,9 @@ const createInvestment = async (req, res) => {
                     userId,
                     investmentId: createdInvestment.id,
                     projectId,
-                    provider: 'STRIPE',
+                    provider,
                     status: 'pending',
-                    amount: parsedAmount,
+                    amountMinor: amount.amount,
                     currency,
                 },
             });
@@ -70,24 +98,33 @@ const createInvestment = async (req, res) => {
             };
         });
 
-        const checkoutSession = await createInvestmentCheckoutSession({
-            userId,
-            projectId,
-            investmentId: investment.id,
-            paymentId: payment.id,
-            amount: parsedAmount,
-            currency,
+        // The controller no longer knows what a Stripe session is. It asks the
+        // adapter to initiate and records whatever handle comes back.
+        const adapter = getAdapter(provider);
+        const result = await adapter.initiate({
+            payment,
             projectTitle: projectRecord.title,
         });
 
         await prisma.payment.update({
             where: { id: payment.id },
-            data: { stripeCheckoutSessionId: checkoutSession.id },
+            data: {
+                providerRef: result.providerRef || null,
+                providerMeta: result.providerMeta || undefined,
+                status: result.status || 'pending',
+            },
         });
 
         res.status(201).json({
             message: 'Payment initiated successfully',
-            checkoutUrl: checkoutSession.url,
+            provider,
+            status: result.status || 'pending',
+            // `nextAction` tells the client what to do: redirect for a card,
+            // display bank instructions for a wire.
+            nextAction: result.nextAction,
+            // Retained so existing clients that only understand a redirect keep
+            // working without a coordinated frontend release.
+            checkoutUrl: result.nextAction?.type === 'redirect' ? result.nextAction.url : undefined,
             investmentId: investment.id,
             paymentId: payment.id,
         });
@@ -104,16 +141,26 @@ const createInvestment = async (req, res) => {
             return res.status(400).json({ error: 'Funding deadline has passed for this project' });
         }
 
+        if (error.message.startsWith('CURRENCY_MISMATCH:')) {
+            const projectCurrency = error.message.split(':')[1];
+            return res.status(400).json({
+                error: `This project is denominated in ${projectCurrency}. Investments in another currency are not supported.`,
+            });
+        }
+
+        // These carry minor units across the throw. Format them back to major
+        // units for display — a user told "Minimum investment is 50000" when the
+        // real minimum is $500 would reasonably give up.
         if (error.message.startsWith('MIN_INVESTMENT:')) {
-            const minInvestment = error.message.split(':')[1];
-            return res.status(400).json({ error: `Minimum investment is ${minInvestment}` });
+            const minimum = money(BigInt(error.message.split(':')[1] || '0'), currency);
+            return res.status(400).json({ error: `Minimum investment is ${format(minimum)}` });
         }
 
         if (error.message.startsWith('EXCEEDS_REMAINING:')) {
-            const remaining = Number(error.message.split(':')[1] || 0);
+            const remaining = money(BigInt(error.message.split(':')[1] || '0'), currency);
             return res.status(400).json({
-                error: remaining > 0
-                    ? `Amount exceeds remaining funding. Maximum allowed is ${remaining}`
+                error: remaining.amount > 0n
+                    ? `Amount exceeds remaining funding. Maximum allowed is ${format(remaining)}`
                     : 'This project is fully funded',
             });
         }
@@ -139,8 +186,9 @@ const getUserInvestments = async (req, res) => {
                         title: true,
                         location: true,
                         category: true,
-                        totalFunding: true,
-                        currentFunding: true,
+                        totalFundingMinor: true,
+                        currentFundingMinor: true,
+                        currency: true,
                         projectedROI: true,
                         payoutFrequency: true,
                         status: true,

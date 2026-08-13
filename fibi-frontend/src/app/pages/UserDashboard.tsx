@@ -71,9 +71,11 @@ import { MEMBERSHIP_PLANS } from '@/lib/membership';
 type ApiInvestment = {
   id: string;
   projectId: string;
-  amountInvested: number;
-  currentValue: number | null;
-  totalReturns: number | null;
+  // Integer MINOR units (cents), matching the API.
+  amountInvestedMinor: number;
+  currentValueMinor: number | null;
+  totalReturnsMinor: number | null;
+  currency: string;
   status: 'pending' | 'active' | 'completed';
   investmentDate: string;
   project: {
@@ -81,8 +83,10 @@ type ApiInvestment = {
     title: string;
     location: string;
     category: string;
-    totalFunding: number;
-    currentFunding: number;
+    // Integer MINOR units (cents), matching the API.
+    totalFundingMinor: number;
+    currentFundingMinor: number;
+    currency: string;
     projectedROI: number;
     payoutFrequency: string;
     status: 'open' | 'funded' | 'active' | 'closed';
@@ -98,7 +102,9 @@ type InvestmentsResponse = {
 type ApiTransaction = {
   id: string;
   userId: string;
-  amount: number;
+  /** Integer MINOR units (cents). */
+  amountMinor: number;
+  currency: string;
   type: 'DEPOSIT' | 'WITHDRAWAL' | 'INVESTMENT' | 'PAYOUT';
   status: 'pending' | 'completed' | 'failed';
   createdAt: string;
@@ -330,17 +336,17 @@ export default function UserDashboard() {
     () =>
       investments.map((inv) => ({
         ...inv,
-        currentValue: inv.currentValue ?? inv.amountInvested,
-        totalReturns: inv.totalReturns ?? 0,
+        currentValueMinor: inv.currentValueMinor ?? inv.amountInvestedMinor,
+        totalReturnsMinor: inv.totalReturnsMinor ?? 0,
         projectTitle: inv.project?.title ?? 'Project',
       })),
     [investments]
   );
 
   const totals = useMemo(() => {
-    const totalInvested = userInvestments.reduce((sum, inv) => sum + inv.amountInvested, 0);
-    const totalCurrentValue = userInvestments.reduce((sum, inv) => sum + inv.currentValue, 0);
-    const totalReturns = userInvestments.reduce((sum, inv) => sum + inv.totalReturns, 0);
+    const totalInvested = userInvestments.reduce((sum, inv) => sum + inv.amountInvestedMinor, 0);
+    const totalCurrentValue = userInvestments.reduce((sum, inv) => sum + inv.currentValueMinor, 0);
+    const totalReturns = userInvestments.reduce((sum, inv) => sum + inv.totalReturnsMinor, 0);
     const totalGain = totalCurrentValue - totalInvested;
     const totalGainPercentage =
       totalInvested > 0 ? ((totalGain / totalInvested) * 100).toFixed(2) : '0.00';
@@ -355,13 +361,14 @@ export default function UserDashboard() {
 
   const { totalInvested, totalCurrentValue, totalReturns, totalGain, totalGainPercentage } = totals;
 
-  const formatCurrency = (amount: number) =>
+  // Takes integer MINOR units (cents), matching the API.
+  const formatCurrency = (minorUnits: number) =>
     new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(amount);
+    }).format(minorUnits / 100);
 
   const portfolioData = useMemo(() => {
     const { totalInvested: inv, totalCurrentValue: cur } = totals;
@@ -389,7 +396,7 @@ export default function UserDashboard() {
     const byCat: Record<string, number> = {};
     userInvestments.forEach((inv) => {
       const key = inv.project?.category ?? 'other';
-      byCat[key] = (byCat[key] ?? 0) + inv.amountInvested;
+      byCat[key] = (byCat[key] ?? 0) + inv.amountInvestedMinor;
     });
     return Object.entries(byCat).map(([name, value]) => ({
       name: formatCategory(name),
@@ -576,7 +583,8 @@ export default function UserDashboard() {
                 }
                 setWithdrawBusy(true);
                 const res = await postJson<{ transaction: ApiTransaction }>('/api/v1/transactions', {
-                  amount: n,
+                  // The user types major units; the API takes minor units.
+                  amountMinor: Math.round(n * 100),
                   type: 'WITHDRAWAL',
                 });
                 setWithdrawBusy(false);
@@ -657,7 +665,8 @@ export default function UserDashboard() {
                 }
                 setDepositBusy(true);
                 const res = await postJson<{ transaction: ApiTransaction }>('/api/v1/transactions', {
-                  amount: n,
+                  // The user types major units; the API takes minor units.
+                  amountMinor: Math.round(n * 100),
                   type: 'DEPOSIT',
                 });
                 setDepositBusy(false);
@@ -1060,7 +1069,7 @@ export default function UserDashboard() {
                           }`}
                         >
                           {tx.type === 'WITHDRAWAL' || tx.type === 'INVESTMENT' ? '−' : '+'}
-                          {formatCurrency(tx.amount)}
+                          {formatCurrency(tx.amountMinor)}
                         </p>
                         <Badge variant="outline" className="mt-1 capitalize text-xs">
                           {tx.status}
@@ -1331,7 +1340,7 @@ export default function UserDashboard() {
                                   className={`font-semibold tabular-nums shrink-0 ${out ? 'text-red-600' : 'text-emerald-700'}`}
                                 >
                                   {out ? '−' : '+'}
-                                  {formatCurrency(tx.amount)}
+                                  {formatCurrency(tx.amountMinor)}
                                 </span>
                               </div>
                               <p className="text-xs text-slate-500 mt-1">
@@ -1459,7 +1468,7 @@ export default function UserDashboard() {
                     {suggestedProjects.map((p: Project) => {
                       const pct = Math.min(
                         100,
-                        Math.round((p.currentFunding / p.totalFunding) * 100)
+                        Math.round((p.currentFundingMinor / p.totalFundingMinor) * 100)
                       );
                       return (
                         <Card
@@ -1516,15 +1525,15 @@ export default function UserDashboard() {
                     <div className="space-y-5">
                       {userInvestments.map((investment) => {
                         const project = investment.project;
-                        const gain = investment.currentValue - investment.amountInvested;
+                        const gain = investment.currentValueMinor - investment.amountInvestedMinor;
                         const gainPercentage =
-                          investment.amountInvested > 0
-                            ? ((gain / investment.amountInvested) * 100).toFixed(2)
+                          investment.amountInvestedMinor > 0
+                            ? ((gain / investment.amountInvestedMinor) * 100).toFixed(2)
                             : '0';
                         const fundPct = project
                           ? Math.min(
                               100,
-                              Math.round((project.currentFunding / project.totalFunding) * 100)
+                              Math.round((project.currentFundingMinor / project.totalFundingMinor) * 100)
                             )
                           : 0;
 
@@ -1578,7 +1587,7 @@ export default function UserDashboard() {
                                           Invested
                                         </div>
                                         <div className="font-semibold text-slate-900 mt-0.5 tabular-nums">
-                                          {formatCurrency(investment.amountInvested)}
+                                          {formatCurrency(investment.amountInvestedMinor)}
                                         </div>
                                       </div>
                                       <div className="rounded-xl bg-slate-50 px-3 py-2">
@@ -1586,7 +1595,7 @@ export default function UserDashboard() {
                                           Current value
                                         </div>
                                         <div className="font-semibold text-slate-900 mt-0.5 tabular-nums">
-                                          {formatCurrency(investment.currentValue)}
+                                          {formatCurrency(investment.currentValueMinor)}
                                         </div>
                                       </div>
                                       <div className="rounded-xl bg-slate-50 px-3 py-2">
@@ -1594,7 +1603,7 @@ export default function UserDashboard() {
                                           Returns
                                         </div>
                                         <div className="font-semibold text-emerald-600 mt-0.5 tabular-nums">
-                                          {formatCurrency(investment.totalReturns)}
+                                          {formatCurrency(investment.totalReturnsMinor)}
                                         </div>
                                       </div>
                                       <div className="rounded-xl bg-slate-50 px-3 py-2">
@@ -1617,7 +1626,7 @@ export default function UserDashboard() {
                                         </p>
                                         <div className="flex justify-between text-xs text-slate-500 mb-1">
                                           <span>
-                                            {formatCurrency(project.currentFunding)} raised
+                                            {formatCurrency(project.currentFundingMinor)} raised
                                           </span>
                                           <span>{fundPct}% of goal</span>
                                         </div>

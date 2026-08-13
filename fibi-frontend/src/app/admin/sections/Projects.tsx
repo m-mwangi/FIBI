@@ -40,6 +40,8 @@ import {
   formatDate,
   formatNumber,
   fundingPercent,
+  majorToMinor,
+  minorToMajor,
 } from '../lib/format';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -72,9 +74,11 @@ type FormState = {
   title: string;
   category: string;
   location: string;
+  /** MAJOR units — converted to minor units on submit. */
   minInvestment: number;
   totalFunding: number;
   currentFunding: number;
+  currency: string;
   investors: number;
   projectedROI: number;
   payoutFrequency: string;
@@ -91,6 +95,7 @@ const emptyForm = (): FormState => ({
   minInvestment: 100,
   totalFunding: 0,
   currentFunding: 0,
+  currency: 'USD',
   investors: 0,
   projectedROI: 10,
   payoutFrequency: 'Quarterly',
@@ -104,9 +109,12 @@ const formFromProject = (p: Project): FormState => ({
   title: p.title,
   category: p.category,
   location: p.location,
-  minInvestment: p.minInvestment,
-  totalFunding: p.totalFunding,
-  currentFunding: p.currentFunding,
+  // FormState is in MAJOR units because that is what an operator types. The
+  // conversion back to minor units happens once, on submit.
+  minInvestment: minorToMajor(p.minInvestmentMinor, p.currency),
+  totalFunding: minorToMajor(p.totalFundingMinor, p.currency),
+  currentFunding: minorToMajor(p.currentFundingMinor, p.currency),
+  currency: p.currency,
   investors: p.investors,
   projectedROI: p.projectedROI,
   payoutFrequency: p.payoutFrequency,
@@ -206,20 +214,20 @@ function ProjectCard({
               {project.location}
             </p>
           </div>
-          <Ring current={project.currentFunding} total={project.totalFunding} size={42} />
+          <Ring current={project.currentFundingMinor} total={project.totalFundingMinor} size={42} />
         </div>
 
         <dl className="adm-num mt-3 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-center">
           <div>
             <dt className="text-[0.6875rem] text-slate-400">Raised</dt>
             <dd className="text-sm font-semibold text-slate-800">
-              {formatCompact(project.currentFunding)}
+              {formatCompact(project.currentFundingMinor)}
             </dd>
           </div>
           <div>
             <dt className="text-[0.6875rem] text-slate-400">Target</dt>
             <dd className="text-sm font-semibold text-slate-800">
-              {formatCompact(project.totalFunding)}
+              {formatCompact(project.totalFundingMinor)}
             </dd>
           </div>
           <div>
@@ -292,8 +300,8 @@ export default function Projects() {
   }, [projects.data]);
 
   const stats = useMemo(() => {
-    const raised = projects.data.reduce((sum, p) => sum + p.currentFunding, 0);
-    const target = projects.data.reduce((sum, p) => sum + p.totalFunding, 0);
+    const raised = projects.data.reduce((sum, p) => sum + p.currentFundingMinor, 0);
+    const target = projects.data.reduce((sum, p) => sum + p.totalFundingMinor, 0);
     const investors = projects.data.reduce((sum, p) => sum + p.investors, 0);
     return { raised, target, investors, coverage: target > 0 ? (raised / target) * 100 : 0 };
   }, [projects.data]);
@@ -353,9 +361,10 @@ export default function Projects() {
     fd.append('title', form.title.trim());
     fd.append('location', form.location.trim());
     fd.append('category', form.category.trim());
-    fd.append('minInvestment', String(form.minInvestment));
-    fd.append('totalFunding', String(form.totalFunding));
-    fd.append('currentFunding', String(form.currentFunding));
+    fd.append('minInvestmentMinor', String(majorToMinor(form.minInvestment, form.currency)));
+    fd.append('totalFundingMinor', String(majorToMinor(form.totalFunding, form.currency)));
+    fd.append('currentFundingMinor', String(majorToMinor(form.currentFunding, form.currency)));
+    fd.append('currency', form.currency);
     fd.append('investorsCount', String(form.investors));
     fd.append('projectedROI', String(form.projectedROI));
     fd.append('payoutFrequency', form.payoutFrequency);
@@ -422,9 +431,10 @@ export default function Projects() {
         title: form.title.trim(),
         location: form.location.trim(),
         category: form.category.trim(),
-        minInvestment: form.minInvestment,
-        totalFunding: form.totalFunding,
-        currentFunding: form.currentFunding,
+        minInvestmentMinor: majorToMinor(form.minInvestment, form.currency),
+        totalFundingMinor: majorToMinor(form.totalFunding, form.currency),
+        currentFundingMinor: majorToMinor(form.currentFunding, form.currency),
+        currency: form.currency,
         investorsCount: form.investors,
         projectedROI: form.projectedROI,
         payoutFrequency: form.payoutFrequency,
@@ -520,12 +530,12 @@ export default function Projects() {
     {
       key: 'funding',
       header: 'Funding',
-      sortValue: (p) => (p.totalFunding > 0 ? p.currentFunding / p.totalFunding : 0),
+      sortValue: (p) => (p.totalFundingMinor > 0 ? p.currentFundingMinor / p.totalFundingMinor : 0),
       cell: (p) => (
         <div>
-          <FundingBar current={p.currentFunding} total={p.totalFunding} />
+          <FundingBar current={p.currentFundingMinor} total={p.totalFundingMinor} />
           <p className="adm-num mt-1 text-xs text-slate-400">
-            {formatCompact(p.currentFunding)} / {formatCompact(p.totalFunding)}
+            {formatCompact(p.currentFundingMinor)} / {formatCompact(p.totalFundingMinor)}
           </p>
         </div>
       ),
@@ -903,7 +913,8 @@ export default function Projects() {
                   <div>
                     <p className="text-xs font-medium text-slate-500">Funding progress</p>
                     <p className="adm-num mt-0.5 text-sm text-slate-700">
-                      {formatCurrency(form.currentFunding)} of {formatCurrency(form.totalFunding)}
+                      {formatCurrency(majorToMinor(form.currentFunding, form.currency), form.currency)} of{' '}
+                      {formatCurrency(majorToMinor(form.totalFunding, form.currency), form.currency)}
                     </p>
                   </div>
                   <Ring current={form.currentFunding} total={form.totalFunding} size={46} />

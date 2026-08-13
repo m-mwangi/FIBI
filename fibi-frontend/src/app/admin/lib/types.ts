@@ -3,7 +3,9 @@
 export type AdminTransaction = {
   id: string;
   userId: string;
-  amount: number;
+  /** Integer MINOR units (cents). */
+  amountMinor: number;
+  currency: string;
   type: 'DEPOSIT' | 'WITHDRAWAL' | 'INVESTMENT' | 'PAYOUT';
   status: 'pending' | 'completed' | 'failed';
   createdAt: string;
@@ -23,9 +25,11 @@ export type AdminInvestment = {
   id: string;
   userId: string;
   projectId: string;
-  amountInvested: number;
-  currentValue: number | null;
-  totalReturns: number | null;
+  /** Integer MINOR units (cents). */
+  amountInvestedMinor: number;
+  currentValueMinor: number | null;
+  totalReturnsMinor: number | null;
+  currency: string;
   status: 'pending' | 'active' | 'completed';
   investmentDate: string;
   user: { name: string; email: string } | null;
@@ -61,8 +65,9 @@ export type GlobalSettingsDTO = {
   platformName: string;
   supportEmail: string;
   contactPhone: string;
-  minInvestment: number;
-  maxInvestment: number;
+  /** Integer MINOR units (cents). */
+  minInvestmentMinor: number;
+  maxInvestmentMinor: number;
   platformFee: number;
   currency: string;
   depositsEnabled: boolean;
@@ -103,3 +108,47 @@ export const TRANSACTIONS_ALL_API = '/api/v1/transactions/all';
 export const INVESTMENTS_ALL_API = '/api/v1/investments/all';
 export const AUDIT_API = '/api/v1/admin/audit';
 export const MEMBERSHIP_APPLICATIONS_API = '/api/v1/membership/admin/applications';
+
+/** A real-world bank account backing collections or custody. */
+export type BankAccountRow = {
+  id: string;
+  label: string;
+  institution:
+    | 'SBM'
+    | 'ABSA'
+    | 'STANCHART'
+    | 'MORGAN_STANLEY'
+    | 'BANK_OF_SINGAPORE'
+    | 'OTHER';
+  purpose: 'COLLECTION' | 'CUSTODY';
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  swiftCode: string | null;
+  branch: string | null;
+  currency: string;
+  instructions: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BankAccountsResponse = {
+  success: boolean;
+  count: number;
+  accounts: BankAccountRow[];
+};
+
+export const BANK_ACCOUNTS_API = '/api/v1/admin/bank-accounts';
+
+/** Institutions that hold funds but cannot accept investor payments — see PAYMENTS.md §2. */
+export const CUSTODY_ONLY_INSTITUTIONS = ['MORGAN_STANLEY', 'BANK_OF_SINGAPORE'] as const;
+
+export const INSTITUTION_LABEL: Record<string, string> = {
+  SBM: 'SBM Bank',
+  ABSA: 'ABSA',
+  STANCHART: 'Standard Chartered',
+  MORGAN_STANLEY: 'Morgan Stanley (E*Trade)',
+  BANK_OF_SINGAPORE: 'Bank of Singapore',
+  OTHER: 'Other',
+};

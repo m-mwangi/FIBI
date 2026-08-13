@@ -1,6 +1,7 @@
 const { prisma } = require('../config/db');
 const { buildStoredImagePath } = require("../utils/project-image-url.util");
 const { recordAudit, changedFields } = require('../utils/audit');
+const { normaliseCurrency } = require('../utils/money');
 
 const parseArrayInput = (input) => {
     if (Array.isArray(input)) return input;
@@ -19,6 +20,25 @@ const parseArrayInput = (input) => {
     }
 
     return [];
+};
+
+/**
+ * Parse an integer minor-unit field from a request.
+ *
+ * Multipart form fields arrive as strings, so this accepts strings, numbers and
+ * BigInts. A fractional value is rejected rather than truncated: it means the
+ * caller sent major units (500.50) where minor units were expected, and
+ * silently keeping "500" would understate the amount by a factor of 100.
+ */
+const parseMinorField = (value) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (typeof value === 'bigint') return value;
+
+    const text = String(value).trim();
+    if (!/^-?\d+$/.test(text)) {
+        throw new Error(`INVALID_MINOR_AMOUNT:${text}`);
+    }
+    return BigInt(text);
 };
 
 const parseNumberField = (value) => {
@@ -66,9 +86,10 @@ const createProject = async (req, res) => {
             title,
             location,
             category,
-            minInvestment,
-            totalFunding,
-            currentFunding,
+            minInvestmentMinor,
+            totalFundingMinor,
+            currentFundingMinor,
+            currency,
             investorsCount,
             projectedROI,
             payoutFrequency,
@@ -113,9 +134,10 @@ const createProject = async (req, res) => {
                 title,
                 location,
                 category,
-                minInvestment: parseNumberField(minInvestment),
-                totalFunding: parseNumberField(totalFunding),
-                currentFunding: parseNumberField(currentFunding) ?? 0,
+                minInvestmentMinor: parseMinorField(minInvestmentMinor) ?? 0n,
+                totalFundingMinor: parseMinorField(totalFundingMinor) ?? 0n,
+                currentFundingMinor: parseMinorField(currentFundingMinor) ?? 0n,
+                currency: normaliseCurrency(currency || 'USD'),
                 investorsCount: parseNumberField(investorsCount) ?? 0,
                 projectedROI: parseNumberField(projectedROI),
                 payoutFrequency,
@@ -141,7 +163,8 @@ const createProject = async (req, res) => {
             targetLabel: project.title,
             metadata: {
                 category: project.category,
-                totalFunding: project.totalFunding,
+                totalFundingMinor: String(project.totalFundingMinor),
+                currency: project.currency,
                 status: project.status,
             },
         });
@@ -171,7 +194,17 @@ const updateProject = async (req, res) => {
         const bodyImages = parseArrayInput(updates.images);
         delete updates.images;
 
-        const numericKeys = ["minInvestment", "totalFunding", "projectedROI", "currentFunding", "investorsCount"];
+        // Money fields are BigInt minor units; the rest stay plain numbers.
+        const minorKeys = ["minInvestmentMinor", "totalFundingMinor", "currentFundingMinor"];
+        minorKeys.forEach((key) => {
+            if (updates[key] !== undefined) {
+                const parsed = parseMinorField(updates[key]);
+                if (parsed !== undefined) updates[key] = parsed;
+                else delete updates[key];
+            }
+        });
+
+        const numericKeys = ["projectedROI", "investorsCount"];
         numericKeys.forEach((key) => {
             if (updates[key] !== undefined) {
                 const parsed = parseNumberField(updates[key]);
@@ -182,6 +215,10 @@ const updateProject = async (req, res) => {
                 }
             }
         });
+
+        if (updates.currency !== undefined) {
+            updates.currency = normaliseCurrency(updates.currency);
+        }
 
         if (primaryUpload || additionalUploads.length > 0) {
             const existingProject = await prisma.project.findUnique({
@@ -220,8 +257,8 @@ const updateProject = async (req, res) => {
         const before = await prisma.project.findUnique({
             where: { id },
             select: {
-                title: true, location: true, category: true, minInvestment: true,
-                totalFunding: true, currentFunding: true, investorsCount: true,
+                title: true, location: true, category: true, minInvestmentMinor: true,
+                totalFundingMinor: true, currentFundingMinor: true, currency: true, investorsCount: true,
                 projectedROI: true, payoutFrequency: true, status: true,
             }
         });
@@ -250,8 +287,9 @@ const updateProject = async (req, res) => {
         const changes = before
             ? changedFields(before, {
                   title: project.title, location: project.location, category: project.category,
-                  minInvestment: project.minInvestment, totalFunding: project.totalFunding,
-                  currentFunding: project.currentFunding, investorsCount: project.investorsCount,
+                  minInvestmentMinor: project.minInvestmentMinor, totalFundingMinor: project.totalFundingMinor,
+                  currentFundingMinor: project.currentFundingMinor, currency: project.currency,
+                  investorsCount: project.investorsCount,
                   projectedROI: project.projectedROI, payoutFrequency: project.payoutFrequency,
                   status: project.status,
               })
@@ -282,7 +320,7 @@ const deleteProject = async (req, res) => {
         // Capture the title before the row disappears — see deleteUser.
         const target = await prisma.project.findUnique({
             where: { id },
-            select: { id: true, title: true, category: true, currentFunding: true }
+            select: { id: true, title: true, category: true, currentFundingMinor: true, currency: true }
         });
 
         await prisma.project.delete({ where: { id } });
@@ -293,7 +331,11 @@ const deleteProject = async (req, res) => {
                 targetType: 'project',
                 targetId: target.id,
                 targetLabel: target.title,
-                metadata: { category: target.category, currentFunding: target.currentFunding },
+                metadata: {
+                    category: target.category,
+                    currentFundingMinor: String(target.currentFundingMinor),
+                    currency: target.currency,
+                },
             });
         }
 

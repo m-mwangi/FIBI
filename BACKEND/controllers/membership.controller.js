@@ -120,7 +120,8 @@ async function listPlans(req, res, next) {
         id: p.id,
         tier: p.tier,
         name: p.name,
-        monthlyPrice: p.monthlyPrice,
+        monthlyPriceMinor: p.monthlyPriceMinor,
+        currency: p.currency,
         description: p.description,
         features: Array.isArray(p.features) ? p.features : [],
       })),
@@ -428,7 +429,7 @@ async function adminUpdateUserMembership(req, res, next) {
 
 async function adminUpsertPlan(req, res, next) {
   try {
-    const { tier, name, monthlyPrice, description, features, active, sortOrder } = req.body || {};
+    const { tier, name, monthlyPriceMinor, currency, description, features, active, sortOrder } = req.body || {};
     if (!tier || !["free", "basic", "premium", "investor_plus"].includes(tier)) {
       return res.status(400).json({ success: false, error: "Valid tier is required" });
     }
@@ -437,7 +438,8 @@ async function adminUpsertPlan(req, res, next) {
       create: {
         tier,
         name: name || tier,
-        monthlyPrice: typeof monthlyPrice === "number" ? monthlyPrice : 0,
+        monthlyPriceMinor: monthlyPriceMinor === undefined ? 0n : BigInt(monthlyPriceMinor),
+        currency: (currency || "USD").toUpperCase(),
         description: description || "",
         features: Array.isArray(features) ? features : [],
         active: active !== false,
@@ -445,7 +447,8 @@ async function adminUpsertPlan(req, res, next) {
       },
       update: {
         ...(name !== undefined && { name }),
-        ...(monthlyPrice !== undefined && { monthlyPrice }),
+        ...(monthlyPriceMinor !== undefined && { monthlyPriceMinor: BigInt(monthlyPriceMinor) }),
+        ...(currency !== undefined && { currency: String(currency).toUpperCase() }),
         ...(description !== undefined && { description }),
         ...(features !== undefined && { features }),
         ...(active !== undefined && { active }),

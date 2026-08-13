@@ -89,7 +89,7 @@ export default function Overview() {
 
   /* ------------------------------------------------------------- headline */
 
-  const totalRaised = projects.data.reduce((sum, p) => sum + p.currentFunding, 0);
+  const totalRaised = projects.data.reduce((sum, p) => sum + p.currentFundingMinor, 0);
   const openProjects = projects.data.filter((p) => p.status === 'open').length;
   const investorCount = users.data.filter((u) => u.role === 'investor').length;
 
@@ -109,7 +109,7 @@ export default function Overview() {
       cumulativeSumByMonth(
         transactions.data.filter((t) => t.type === 'INVESTMENT' && t.status === 'completed'),
         (t) => t.createdAt,
-        (t) => t.amount,
+        (t) => t.amountMinor,
         months
       ),
     [transactions.data, months]
@@ -152,8 +152,8 @@ export default function Overview() {
   const nearlyFunded = useMemo(
     () =>
       [...projects.data]
-        .filter((p) => p.totalFunding > 0 && p.status === 'open')
-        .sort((a, b) => b.currentFunding / b.totalFunding - a.currentFunding / a.totalFunding)
+        .filter((p) => p.totalFundingMinor > 0 && p.status === 'open')
+        .sort((a, b) => b.currentFundingMinor / b.totalFundingMinor - a.currentFundingMinor / a.totalFundingMinor)
         .slice(0, 5),
     [projects.data]
   );
@@ -164,7 +164,7 @@ export default function Overview() {
         investments.data,
         (i) => i.userId,
         (i) => i.user?.name ?? 'Unknown investor',
-        (i) => i.amountInvested,
+        (i) => i.amountInvestedMinor,
         5
       ),
     [investments.data]
@@ -174,7 +174,7 @@ export default function Overview() {
     const rows = sumByKey(
       projects.data,
       (p) => p.category,
-      (p) => p.currentFunding
+      (p) => p.currentFundingMinor
     ).filter((d) => d.value > 0);
     const total = rows.reduce((sum, r) => sum + r.value, 0);
     return { rows: rows.slice(0, 6), total };
@@ -441,7 +441,7 @@ export default function Overview() {
                         }`}
                       >
                         {inflow ? '+' : '−'}
-                        {formatCurrency(t.amount)}
+                        {formatCurrency(t.amountMinor)}
                       </span>
                       <StatusPill status={t.status} />
                     </div>
@@ -481,11 +481,11 @@ export default function Overview() {
             <ul className="divide-y divide-slate-50">
               {nearlyFunded.map((p) => (
                 <li key={p.id} className="flex items-center gap-4 py-2.5 first:pt-0 last:pb-0">
-                  <Ring current={p.currentFunding} total={p.totalFunding} size={40} />
+                  <Ring current={p.currentFundingMinor} total={p.totalFundingMinor} size={40} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-slate-800">{p.title}</p>
                     <p className="adm-num truncate text-xs text-slate-500">
-                      {formatCompact(p.currentFunding)} of {formatCompact(p.totalFunding)} · {p.location}
+                      {formatCompact(p.currentFundingMinor)} of {formatCompact(p.totalFundingMinor)} · {p.location}
                     </p>
                   </div>
                 </li>

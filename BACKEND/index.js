@@ -31,6 +31,24 @@ connectDB();
 
 const port = config.PORT
 
+// Money columns are BigInt (integer minor units — see utils/money.js), and
+// JSON.stringify throws outright on a BigInt rather than coercing it. Without
+// this replacer every response carrying an amount would 500.
+//
+// Serialised as a Number, not a string, so the client gets an arithmetic-ready
+// value: minor units stay exact in JS up to 2^53, about 90 trillion dollars in
+// cents. Anything beyond that would lose precision silently, so it throws
+// instead — that is the exact bug class this migration exists to remove.
+app.set('json replacer', function jsonReplacer(key, value) {
+    if (typeof value === 'bigint') {
+        if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < -BigInt(Number.MAX_SAFE_INTEGER)) {
+            throw new RangeError(`BigInt ${value} at "${key}" exceeds safe integer range for JSON`);
+        }
+        return Number(value);
+    }
+    return value;
+});
+
 // Behind the nginx edge proxy. Without this Express reads the proxy's own
 // address as req.ip and treats every request as insecure, because it ignores
 // X-Forwarded-For / X-Forwarded-Proto. The value is a hop count rather than

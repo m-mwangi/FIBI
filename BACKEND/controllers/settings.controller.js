@@ -8,8 +8,8 @@ const PATCHABLE = new Set([
     'platformName',
     'supportEmail',
     'contactPhone',
-    'minInvestment',
-    'maxInvestment',
+    'minInvestmentMinor',
+    'maxInvestmentMinor',
     'platformFee',
     'currency',
     'depositsEnabled',
@@ -39,6 +39,21 @@ function coerceInt(v) {
     if (v === undefined || v === null || v === '') return undefined;
     const n = parseInt(String(v), 10);
     return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * Sentinel distinguishing "field absent" (undefined) from "field present but
+ * not a valid minor-unit integer". Without it a typo'd amount would be silently
+ * dropped and the old value kept, with the admin told the save succeeded.
+ */
+const INVALID_MINOR = Symbol('invalid-minor');
+
+function coerceMinor(v) {
+    if (v === undefined || v === null || v === '') return undefined;
+    if (typeof v === 'bigint') return v;
+    const text = String(v).trim();
+    if (!/^-?\d+$/.test(text)) return INVALID_MINOR;
+    return BigInt(text);
 }
 
 function coerceBool(v) {
@@ -72,16 +87,23 @@ function buildUpdateData(body) {
     const currency = coerceString(body.currency, { maxLen: 10 });
     if (currency !== undefined) data.currency = currency.toUpperCase();
 
-    const minInvestment = coerceFloat(body.minInvestment);
+    // Investment limits are money: integer MINOR units (see utils/money.js).
+    const minInvestment = coerceMinor(body.minInvestmentMinor);
+    if (minInvestment === INVALID_MINOR) {
+        return { data: {}, error: 'minInvestmentMinor must be an integer in minor units' };
+    }
     if (minInvestment !== undefined) {
-        if (minInvestment <= 0) return { data: {}, error: 'minInvestment must be positive' };
-        data.minInvestment = minInvestment;
+        if (minInvestment <= 0n) return { data: {}, error: 'minInvestmentMinor must be positive' };
+        data.minInvestmentMinor = minInvestment;
     }
 
-    const maxInvestment = coerceFloat(body.maxInvestment);
+    const maxInvestment = coerceMinor(body.maxInvestmentMinor);
+    if (maxInvestment === INVALID_MINOR) {
+        return { data: {}, error: 'maxInvestmentMinor must be an integer in minor units' };
+    }
     if (maxInvestment !== undefined) {
-        if (maxInvestment <= 0) return { data: {}, error: 'maxInvestment must be positive' };
-        data.maxInvestment = maxInvestment;
+        if (maxInvestment <= 0n) return { data: {}, error: 'maxInvestmentMinor must be positive' };
+        data.maxInvestmentMinor = maxInvestment;
     }
 
     const platformFee = coerceFloat(body.platformFee);
@@ -178,14 +200,14 @@ const updateSettings = async (req, res) => {
 
         const existing = await prisma.settings.findUnique({ where: { id: GLOBAL_ID } });
         const base = existing || {
-            minInvestment: 100,
-            maxInvestment: 50000,
+            minInvestmentMinor: 10000n,
+            maxInvestmentMinor: 5000000n,
         };
 
-        const nextMin = data.minInvestment !== undefined ? data.minInvestment : base.minInvestment;
-        const nextMax = data.maxInvestment !== undefined ? data.maxInvestment : base.maxInvestment;
+        const nextMin = data.minInvestmentMinor !== undefined ? data.minInvestmentMinor : base.minInvestmentMinor;
+        const nextMax = data.maxInvestmentMinor !== undefined ? data.maxInvestmentMinor : base.maxInvestmentMinor;
         if (nextMax < nextMin) {
-            return res.status(400).json({ error: 'maxInvestment must be greater than or equal to minInvestment' });
+            return res.status(400).json({ error: 'maxInvestmentMinor must be greater than or equal to minInvestmentMinor' });
         }
 
         const settings = await prisma.settings.upsert({
