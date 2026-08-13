@@ -1,0 +1,141 @@
+/*
+ * Admin console design tokens.
+ *
+ * Imported from AdminLayout.tsx rather than the global stylesheet, so it ships
+ * with the admin chunk and cannot leak into the public site. Plain CSS on
+ * purpose — there are no Tailwind directives here, so `@apply` is unavailable
+ * and everything is written as real declarations.
+ *
+ * The console is a dark navigation rail against a light workspace. Only the
+ * values that actually differ from Tailwind's slate palette are tokenised;
+ * sections still use `slate-*` utilities for one-off text colours.
+ */
+
+.adm-shell {
+  /* Canvas and surfaces */
+  --adm-canvas: #f6f7f9;
+  --adm-surface: #ffffff;
+  --adm-sunken: #f1f3f6;
+
+  /* Hairlines. `line` is the default border; `line-strong` is for dividers
+     that need to survive against a sunken background. */
+  --adm-line: #e4e8ee;
+  --adm-line-strong: #d3d9e2;
+
+  /* Ink ramp: primary figures, secondary labels, tertiary hints. */
+  --adm-ink: #0f172a;
+  --adm-ink-2: #475569;
+  --adm-ink-3: #94a3b8;
+
+  /* Navigation rail */
+  --adm-rail: #0b1220;
+  --adm-rail-2: #131c2e;
+  --adm-rail-line: rgba(255, 255, 255, 0.07);
+  --adm-rail-ink: #8fa0b8;
+  --adm-rail-ink-hi: #f1f5f9;
+
+  /* Brand */
+  --adm-brand: #059669;
+  --adm-brand-hi: #10b981;
+  --adm-brand-soft: #ecfdf5;
+
+  /* Elevation. A real three-step scale — the old portal used one flat
+     `shadow-sm` for cards, popovers and drawers alike, so nothing read as
+     being above anything else. */
+  --adm-e1: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
+  --adm-e2: 0 2px 4px rgb(15 23 42 / 0.04), 0 8px 16px -4px rgb(15 23 42 / 0.08);
+  --adm-e3: 0 8px 12px -4px rgb(15 23 42 / 0.08), 0 24px 48px -12px rgb(15 23 42 / 0.18);
+
+  --adm-r-card: 16px;
+}
+
+/*
+ * Figures.
+ *
+ * Every number in the console — KPI values, table amounts, percentages, axis
+ * labels — carries this. Proportional digits make columns of currency jitter
+ * as values change, which is exactly wrong for a ledger.
+ */
+.adm-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: -0.011em;
+}
+
+.adm-card {
+  background: var(--adm-surface);
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r-card);
+  box-shadow: var(--adm-e1);
+}
+
+/* Thin dark scrollbar for the rail, so a long nav does not paint a bright
+   system scrollbar down the middle of the dark panel. */
+.adm-rail-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+.adm-rail-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.adm-rail-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+}
+.adm-rail-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* One focus treatment for every interactive element in the console. */
+.adm-focus:focus-visible {
+  outline: 2px solid var(--adm-brand);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* Section content settles in rather than snapping. Kept short — this fires on
+   every route change and a slow fade makes navigation feel laggy. */
+.adm-fade-in {
+  animation: adm-fade-in 180ms ease-out both;
+}
+
+@keyframes adm-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The bulk-selection bar slides down over the table toolbar. */
+.adm-slide-down {
+  animation: adm-slide-down 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes adm-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Respect a reduced-motion preference: the console is a work tool and the
+   animations above are decoration, not information. */
+@media (prefers-reduced-motion: reduce) {
+  .adm-fade-in,
+  .adm-slide-down {
+    animation: none;
+  }
+}
+
+/* The logo asset is solid #000000, which would vanish on the dark rail. */
+.adm-logo-invert {
+  filter: brightness(0) invert(1);
+}

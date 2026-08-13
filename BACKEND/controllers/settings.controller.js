@@ -1,4 +1,5 @@
 const { prisma } = require('../config/db');
+const { recordAudit, changedFields } = require('../utils/audit');
 
 const GLOBAL_ID = 'global';
 
@@ -192,6 +193,20 @@ const updateSettings = async (req, res) => {
             update: data,
             create: { id: GLOBAL_ID, ...data },
         });
+
+        // The console PUTs the entire form on every save, so log the diff
+        // against `existing` rather than the payload — otherwise every entry
+        // would list all fifteen fields whether or not they moved.
+        const changes = changedFields(existing, settings);
+        if (changes) {
+            recordAudit(req, {
+                action: 'settings.update',
+                targetType: 'settings',
+                targetId: GLOBAL_ID,
+                targetLabel: 'Platform settings',
+                metadata: { changes },
+            });
+        }
 
         res.status(200).json({ message: 'Settings updated successfully', settings });
     } catch (error) {

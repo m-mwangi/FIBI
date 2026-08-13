@@ -35,6 +35,9 @@ export type UserListEntry = {
   email: string;
   role: "investor" | "admin";
   createdAt: string;
+  /** Stamped on every successful sign-in. Null for accounts that predate the
+   *  field or have never logged in since it was added. */
+  lastLoginAt?: string | null;
 };
 
 export type UsersListResponse = {

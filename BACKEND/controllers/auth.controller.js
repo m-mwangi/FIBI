@@ -266,12 +266,23 @@ const loginUser = async (req, res, next) => {
             });
         }
 
-        if (user.failedLoginAttempts > 0 || user.lockedUntil) {
-            await prisma.user.update({
+        // One write covers both concerns: clear any failed-attempt state and
+        // stamp the sign-in. `lastLoginAt` only feeds the admin console's
+        // "last active" column, so a failure here must not cost the user their
+        // login — hence the catch rather than an await that can reject.
+        await prisma.user
+            .update({
                 where: { id: user.id },
-                data: { failedLoginAttempts: 0, lockedUntil: null },
+                data: {
+                    ...(user.failedLoginAttempts > 0 || user.lockedUntil
+                        ? { failedLoginAttempts: 0, lockedUntil: null }
+                        : {}),
+                    lastLoginAt: new Date(),
+                },
+            })
+            .catch((error) => {
+                console.error('[auth] could not stamp login:', error.message);
             });
-        }
 
         await sendTokenResponse(user, 200, res, 'User logged in successfully');
     } catch (error) {

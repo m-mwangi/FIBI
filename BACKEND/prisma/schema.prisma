@@ -144,6 +144,10 @@ model User {
   // Any JWT issued before this instant is rejected by protect.middleware, so a
   // password reset immediately logs out every existing session on every device.
   passwordChangedAt   DateTime?
+  // Stamped on every successful sign-in (local and OAuth). The admin console
+  // reads it to show when an account was last active; nothing else depends on
+  // it, so a failed write here must never block a login.
+  lastLoginAt         DateTime?
 
   //Relationships
   investments Investment[] //One to many relationship with Investment
@@ -155,6 +159,42 @@ model User {
   reviewedMembershipApplications MembershipApplication[] @relation("MembershipApplicationReviewer")
   memberEventRegistrations   MemberEventRegistration[]
   passwordResetTokens        PasswordResetToken[]
+  adminAuditLogs             AdminAuditLog[]
+}
+
+//////////////////////////////////////////////////////
+// ADMIN AUDIT LOG
+//////////////////////////////////////////////////////
+
+// An append-only record of every state-changing action an admin takes through
+// the console: deletions, project edits, membership decisions, settings saves.
+//
+// The actor is stored twice on purpose. `actorId` keeps the live relation for
+// joins, but it is nulled when that admin's account is deleted — so
+// `actorEmail` is denormalised alongside it, and the history still says who did
+// what after the account is gone. Deleting an admin must not rewrite the past.
+model AdminAuditLog {
+  id          String   @id @default(uuid())
+  actorId     String?
+  actorEmail  String
+  // Dotted verb, e.g. "user.delete", "project.update", "settings.update".
+  action      String
+  // What was acted on: "user" | "project" | "settings" | "membership" | "feature".
+  targetType  String
+  targetId    String?
+  // Human label captured at the time, so a deleted target still reads as a name
+  // rather than a dangling uuid.
+  targetLabel String?
+  // Action-specific detail (changed fields, before/after tier, …).
+  metadata    Json?
+  ip          String?
+  createdAt   DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([action])
+  @@index([targetType, targetId])
 }
 
 //////////////////////////////////////////////////////

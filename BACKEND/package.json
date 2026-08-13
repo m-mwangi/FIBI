@@ -12,6 +12,7 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "create-admin": "node scripts/create-admin.js",
+    "test-email": "node scripts/test-email.js",
     "seed:projects": "node prisma/seed-projects.js"
   },
   "dependencies": {

@@ -8,6 +8,7 @@ const {
   membershipToDto,
   hasTierAccess,
 } = require("../services/membership.service");
+const { recordAudit } = require("../utils/audit");
 
 async function getMyMembership(req, res, next) {
   try {
@@ -150,6 +151,11 @@ async function updateFeatureAccess(req, res, next) {
     if (!Array.isArray(features)) {
       return res.status(400).json({ success: false, error: "features must be an array" });
     }
+    // Snapshot first so the audit entry lists only the gates that moved — the
+    // console saves the whole matrix on every click.
+    const beforeRows = await prisma.membershipFeatureAccess.findMany();
+    const beforeByKey = new Map(beforeRows.map((r) => [r.featureKey, r.minTier]));
+
     for (const item of features) {
       if (!item || typeof item.featureKey !== "string" || !item.minTier) {
         return res.status(400).json({
@@ -166,6 +172,25 @@ async function updateFeatureAccess(req, res, next) {
     const rows = await prisma.membershipFeatureAccess.findMany({
       orderBy: { featureKey: "asc" },
     });
+
+    const changes = rows
+      .filter((r) => beforeByKey.get(r.featureKey) !== r.minTier)
+      .map((r) => ({
+        featureKey: r.featureKey,
+        from: beforeByKey.get(r.featureKey) ?? null,
+        to: r.minTier,
+      }));
+
+    if (changes.length > 0) {
+      recordAudit(req, {
+        action: "membership.features.update",
+        targetType: "feature",
+        targetId: null,
+        targetLabel: `${changes.length} feature gate${changes.length === 1 ? "" : "s"}`,
+        metadata: { changes },
+      });
+    }
+
     res.json({
       success: true,
       features: rows.map((r) => ({ featureKey: r.featureKey, minTier: r.minTier })),
@@ -218,7 +243,12 @@ async function adminReviewApplication(req, res, next) {
       return res.status(400).json({ success: false, error: "action must be approve or reject" });
     }
 
-    const app = await prisma.membershipApplication.findUnique({ where: { id } });
+    // The applicant is included so the audit entry can name a person rather
+    // than a uuid.
+    const app = await prisma.membershipApplication.findUnique({
+      where: { id },
+      include: { user: { select: { name: true, email: true } } },
+    });
     if (!app) {
       return res.status(404).json({ success: false, error: "Application not found" });
     }
@@ -290,6 +320,19 @@ async function adminReviewApplication(req, res, next) {
     }
 
     const membership = await getOrCreateUserMembership(app.userId);
+
+    recordAudit(req, {
+      action: `membership.application.${action}`,
+      targetType: "membership",
+      targetId: app.userId,
+      targetLabel: app.user ? app.user.name : null,
+      metadata: {
+        applicationId: id,
+        email: app.user ? app.user.email : undefined,
+        tier: membership.tier,
+      },
+    });
+
     res.json({
       success: true,
       membership: membershipToDto(membership),
@@ -356,11 +399,24 @@ async function adminUpdateUserMembership(req, res, next) {
       return res.status(400).json({ success: false, error: "No fields to update" });
     }
 
-    await getOrCreateUserMembership(userId);
+    const previous = await getOrCreateUserMembership(userId);
     const updated = await prisma.userMembership.update({
       where: { userId },
       data,
+      include: { user: { select: { name: true, email: true } } },
     });
+
+    recordAudit(req, {
+      action: "membership.update",
+      targetType: "membership",
+      targetId: userId,
+      targetLabel: updated.user ? updated.user.name : null,
+      metadata: {
+        from: { tier: previous.tier, status: previous.status },
+        to: { tier: updated.tier, status: updated.status },
+      },
+    });
+
     res.json({ success: true, membership: membershipToDto(updated) });
   } catch (e) {
     if (e.code === "P2025") {

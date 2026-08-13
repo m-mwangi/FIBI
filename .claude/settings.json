@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(timeout 90 npx prisma migrate dev --name add_admin_audit_and_last_login)"
+    ]
+  }
+}

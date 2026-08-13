@@ -17,7 +17,9 @@ export default function Root() {
     location.pathname.startsWith('/admin') ||
     location.pathname === '/dashboard';
 
-  const hideFooter = isAuthPage;
+  // The admin console is an operator surface with its own full-height chrome —
+  // the marketing footer was rendering underneath every section of it.
+  const hideFooter = isAuthPage || location.pathname.startsWith('/admin');
 
   return (
     <div className="flex flex-col min-h-screen">

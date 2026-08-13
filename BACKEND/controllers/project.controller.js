@@ -1,5 +1,6 @@
 const { prisma } = require('../config/db');
 const { buildStoredImagePath } = require("../utils/project-image-url.util");
+const { recordAudit, changedFields } = require('../utils/audit');
 
 const parseArrayInput = (input) => {
     if (Array.isArray(input)) return input;
@@ -133,6 +134,18 @@ const createProject = async (req, res) => {
             include: { timeline: true, projectImages: true }
         });
 
+        recordAudit(req, {
+            action: 'project.create',
+            targetType: 'project',
+            targetId: project.id,
+            targetLabel: project.title,
+            metadata: {
+                category: project.category,
+                totalFunding: project.totalFunding,
+                status: project.status,
+            },
+        });
+
         res.status(201).json({ message: 'Project created successfully', project });
     } catch (error) {
         console.error('Error creating project:', error);
@@ -200,7 +213,18 @@ const updateProject = async (req, res) => {
             allExtraImages.push(updates.imageUrl);
         }
 
-        delete updates.timeline; 
+        delete updates.timeline;
+
+        // Snapshot the scalar fields before writing so the audit entry can name
+        // what actually changed instead of restating the whole form.
+        const before = await prisma.project.findUnique({
+            where: { id },
+            select: {
+                title: true, location: true, category: true, minInvestment: true,
+                totalFunding: true, currentFunding: true, investorsCount: true,
+                projectedROI: true, payoutFrequency: true, status: true,
+            }
+        });
 
         const project = await prisma.project.update({
             where: { id },
@@ -223,6 +247,27 @@ const updateProject = async (req, res) => {
             include: { timeline: true, projectImages: true }
         });
 
+        const changes = before
+            ? changedFields(before, {
+                  title: project.title, location: project.location, category: project.category,
+                  minInvestment: project.minInvestment, totalFunding: project.totalFunding,
+                  currentFunding: project.currentFunding, investorsCount: project.investorsCount,
+                  projectedROI: project.projectedROI, payoutFrequency: project.payoutFrequency,
+                  status: project.status,
+              })
+            : null;
+
+        recordAudit(req, {
+            action: 'project.update',
+            targetType: 'project',
+            targetId: project.id,
+            targetLabel: project.title,
+            metadata: {
+                changes,
+                imagesAdded: imageRows.length || undefined,
+            },
+        });
+
         res.status(200).json({ message: 'Project updated successfully', project: updatedProject || project });
     } catch (error) {
         console.error('Error updating project:', error);
@@ -233,7 +278,25 @@ const updateProject = async (req, res) => {
 const deleteProject = async (req, res) => {
     try {
         const { id } = req.params;
+
+        // Capture the title before the row disappears — see deleteUser.
+        const target = await prisma.project.findUnique({
+            where: { id },
+            select: { id: true, title: true, category: true, currentFunding: true }
+        });
+
         await prisma.project.delete({ where: { id } });
+
+        if (target) {
+            recordAudit(req, {
+                action: 'project.delete',
+                targetType: 'project',
+                targetId: target.id,
+                targetLabel: target.title,
+                metadata: { category: target.category, currentFunding: target.currentFunding },
+            });
+        }
+
         res.status(200).json({ message: 'Project deleted successfully' });
     } catch (error) {
         console.error('Error deleting project:', error);

@@ -12,11 +12,16 @@ import { USERS_PREFIX, type UsersListResponse, type UserListEntry } from '@/lib/
 import { normalizeApiProject, type ProjectListResponse } from '@/lib/projects';
 import type { Project } from '../../data/projects';
 import {
+  AUDIT_API,
   INVESTMENTS_ALL_API,
+  MEMBERSHIP_APPLICATIONS_API,
   PROJECTS_API,
   TRANSACTIONS_ALL_API,
   type AdminInvestment,
   type AdminTransaction,
+  type AuditEntry,
+  type AuditResponse,
+  type MembershipApplicationRow,
 } from './types';
 
 /**
@@ -42,8 +47,17 @@ type AdminData = {
   projects: Resource<Project[]>;
   transactions: Resource<AdminTransaction[]>;
   investments: Resource<AdminInvestment[]>;
+  /** Membership applications live here, not only in the Memberships section,
+   *  so the rail badge and the action queue can count pending reviews without
+   *  that section being mounted. */
+  applications: Resource<MembershipApplicationRow[]>;
+  audit: Resource<AuditEntry[]>;
+  /** When the last successful refreshAll completed — shown in the topbar. */
+  lastSyncedAt: Date | null;
   refreshUsers: () => Promise<void>;
   refreshProjects: () => Promise<void>;
+  refreshApplications: () => Promise<void>;
+  refreshAudit: () => Promise<void>;
   refreshAll: () => Promise<void>;
   /** Local mutations so a delete/create reflects instantly without a round trip. */
   setUsers: (updater: (prev: UserListEntry[]) => UserListEntry[]) => void;
@@ -59,6 +73,11 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const [projects, setProjectsState] = useState<Resource<Project[]>>(emptyResource([]));
   const [transactions, setTransactions] = useState<Resource<AdminTransaction[]>>(emptyResource([]));
   const [investments, setInvestments] = useState<Resource<AdminInvestment[]>>(emptyResource([]));
+  const [applications, setApplications] = useState<Resource<MembershipApplicationRow[]>>(
+    emptyResource([])
+  );
+  const [audit, setAudit] = useState<Resource<AuditEntry[]>>(emptyResource([]));
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   const loadUsers = useCallback(async () => {
     setUsersState((r) => ({ ...r, loading: true, error: '' }));
@@ -100,9 +119,39 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const loadApplications = useCallback(async () => {
+    setApplications((r) => ({ ...r, loading: true, error: '' }));
+    const res = await getJson<{ success: boolean; applications: MembershipApplicationRow[] }>(
+      MEMBERSHIP_APPLICATIONS_API
+    );
+    setApplications(
+      res.ok
+        ? { data: res.data.applications ?? [], loading: false, error: '' }
+        : { data: [], loading: false, error: res.error || 'Failed to load applications.' }
+    );
+  }, []);
+
+  const loadAudit = useCallback(async () => {
+    setAudit((r) => ({ ...r, loading: true, error: '' }));
+    const res = await getJson<AuditResponse>(`${AUDIT_API}?limit=50`);
+    setAudit(
+      res.ok
+        ? { data: res.data.entries ?? [], loading: false, error: '' }
+        : { data: [], loading: false, error: res.error || 'Failed to load activity.' }
+    );
+  }, []);
+
   const refreshAll = useCallback(async () => {
-    await Promise.all([loadUsers(), loadProjects(), loadTransactions(), loadInvestments()]);
-  }, [loadUsers, loadProjects, loadTransactions, loadInvestments]);
+    await Promise.all([
+      loadUsers(),
+      loadProjects(),
+      loadTransactions(),
+      loadInvestments(),
+      loadApplications(),
+      loadAudit(),
+    ]);
+    setLastSyncedAt(new Date());
+  }, [loadUsers, loadProjects, loadTransactions, loadInvestments, loadApplications, loadAudit]);
 
   useEffect(() => {
     void refreshAll();
@@ -122,13 +171,33 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       projects,
       transactions,
       investments,
+      applications,
+      audit,
+      lastSyncedAt,
       refreshUsers: loadUsers,
       refreshProjects: loadProjects,
+      refreshApplications: loadApplications,
+      refreshAudit: loadAudit,
       refreshAll,
       setUsers,
       setProjects,
     }),
-    [users, projects, transactions, investments, loadUsers, loadProjects, refreshAll, setUsers, setProjects]
+    [
+      users,
+      projects,
+      transactions,
+      investments,
+      applications,
+      audit,
+      lastSyncedAt,
+      loadUsers,
+      loadProjects,
+      loadApplications,
+      loadAudit,
+      refreshAll,
+      setUsers,
+      setProjects,
+    ]
   );
 
   return <AdminDataContext.Provider value={value}>{children}</AdminDataContext.Provider>;

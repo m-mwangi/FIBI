@@ -61,6 +61,14 @@ const handleOAuthLogin = async (provider, providerId, email, name, res, next) =>
         });
 
         if (user) {
+            // Same stamp the local login path writes, so "last active" in the
+            // admin console does not silently ignore social sign-ins. Failing
+            // to record it must not cost the user their session.
+            await prisma.user
+                .update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
+                .catch((error) => {
+                    console.error('[oauth] could not stamp login:', error.message);
+                });
             return await sendTokenResponse(user, 200, res, `Logged in with ${provider} successfully`);
         }
 
@@ -70,7 +78,8 @@ const handleOAuthLogin = async (provider, providerId, email, name, res, next) =>
                 name: name || `${provider} User`,
                 email,
                 password: await createOAuthPassword(provider, providerId),
-                role: 'investor'
+                role: 'investor',
+                lastLoginAt: new Date()
             }
         });
 

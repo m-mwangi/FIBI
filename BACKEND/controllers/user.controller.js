@@ -1,5 +1,6 @@
 const { prisma } = require('../config/db');
 const bcrypt = require('bcryptjs');
+const { recordAudit } = require('../utils/audit');
 
 const getProfile = async (req, res, next) => {
     try {
@@ -85,7 +86,10 @@ const changePassword = async (req, res, next) => {
 // Admin handlers
 const getAllUsers = async (req, res, next) => {
     try {
-        const users = await prisma.user.findMany({ select: { id: true, name: true, email: true, role: true, createdAt: true } });
+        const users = await prisma.user.findMany({
+            select: { id: true, name: true, email: true, role: true, createdAt: true, lastLoginAt: true },
+            orderBy: { createdAt: 'desc' }
+        });
         res.status(200).json({ success: true, count: users.length, data: users });
     } catch (error) { next(error); }
 };
@@ -95,7 +99,28 @@ const deleteUser = async (req, res, next) => {
         if (req.params.id === req.user.id) {
             return res.status(400).json({ success: false, error: 'You cannot delete your own account' });
         }
+
+        // Read the account before deleting it: once the row is gone the audit
+        // entry could only name a uuid, which is useless when reviewing who was
+        // removed.
+        const target = await prisma.user.findUnique({
+            where: { id: req.params.id },
+            select: { id: true, name: true, email: true, role: true }
+        });
+        if (!target) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+
         await prisma.user.delete({ where: { id: req.params.id } });
+
+        recordAudit(req, {
+            action: 'user.delete',
+            targetType: 'user',
+            targetId: target.id,
+            targetLabel: target.name,
+            metadata: { email: target.email, role: target.role }
+        });
+
         res.status(200).json({ success: true, message: 'User deleted' });
     } catch (error) { next(error); }
 };
