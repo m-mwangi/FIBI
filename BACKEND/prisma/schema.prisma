@@ -135,6 +135,16 @@ model User {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  // --- Credential security ---
+  // Consecutive failed password attempts. Reset to 0 on any successful login.
+  failedLoginAttempts Int       @default(0)
+  // Set when failedLoginAttempts crosses the threshold; logins are refused until
+  // this passes, which caps online password guessing even from rotating IPs.
+  lockedUntil         DateTime?
+  // Any JWT issued before this instant is rejected by protect.middleware, so a
+  // password reset immediately logs out every existing session on every device.
+  passwordChangedAt   DateTime?
+
   //Relationships
   investments Investment[] //One to many relationship with Investment
   transactions Transaction[] //One to many relationship with Transaction
@@ -144,6 +154,30 @@ model User {
   membershipApplications     MembershipApplication[]
   reviewedMembershipApplications MembershipApplication[] @relation("MembershipApplicationReviewer")
   memberEventRegistrations   MemberEventRegistration[]
+  passwordResetTokens        PasswordResetToken[]
+}
+
+//////////////////////////////////////////////////////
+// PASSWORD RESET TOKENS
+//////////////////////////////////////////////////////
+
+// Only the SHA-256 hash of the reset token is stored. A leaked database dump
+// therefore cannot be used to take over accounts: the raw token exists only in
+// the email that was sent, and each row is single-use and short-lived.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  // Retained for abuse investigation (who requested resets for this account).
+  requestIp String?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 //////////////////////////////////////////////////////

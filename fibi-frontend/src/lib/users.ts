@@ -60,14 +60,9 @@ export function formValueToApiIdType(v: string): string | undefined {
   return s;
 }
 
-/** Build synthetic chart points ending at `count` (dashboard illustration). */
-export function userGrowthSeriesFromCount(count: number) {
-  const months = ["Oct 25", "Nov 25", "Dec 25", "Jan 26", "Feb 26", "Mar 26"];
-  const n = months.length;
-  if (count <= 0) return months.map((month) => ({ month, users: 0 }));
-  const factors = [0.55, 0.62, 0.72, 0.8, 0.9, 1];
-  return months.map((month, i) => ({
-    month,
-    users: Math.max(0, Math.round(count * factors[i]!)),
-  }));
-}
+/*
+ * `userGrowthSeriesFromCount` used to live here: it fitted a fixed curve to a
+ * single total and the dashboard plotted it as a growth trend. It was removed
+ * because the shape was invented. Real series are derived from `createdAt`
+ * timestamps in app/admin/lib/analytics.ts.
+ */

@@ -37,15 +37,28 @@ export type OAuthPayload = {
   name?: string;
 };
 
+export type SimpleResult =
+  | { success: true; message: string }
+  | { success: false; error: string };
+
 interface AuthContextType {
   user: User | null;
   /** false until initial session check finishes (avoids protected-route flash) */
   authReady: boolean;
   /** Re-fetch `/auth/me` and update context (e.g. after profile name change). */
   refreshUser: () => Promise<void>;
-  login: (email: string, password: string, role: "investor" | "admin") => Promise<AuthResult>;
+  /**
+   * No `role` argument by design: the server decides the role from the stored
+   * account and returns it, and the caller routes on `result.user.role`. Asking
+   * the client to declare its own role let a caller assert privilege and only
+   * ever produced "wrong role" errors for people who picked the wrong tab.
+   */
+  login: (email: string, password: string) => Promise<AuthResult>;
   signup: (payload: SignupPayload) => Promise<AuthResult>;
   oauthLogin: (provider: OAuthProvider, payload: OAuthPayload) => Promise<AuthResult>;
+  requestPasswordReset: (email: string) => Promise<SimpleResult>;
+  verifyResetToken: (token: string) => Promise<{ success: true; email: string } | { success: false; error: string }>;
+  resetPassword: (token: string, password: string) => Promise<SimpleResult>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
 }
@@ -127,14 +140,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = async (
-    email: string,
-    password: string,
-    role: "investor" | "admin"
-  ): Promise<AuthResult> => {
-    const body = { email, password, role };
-
-    const res = await postJson<AuthSuccessResponse>(`${AUTH_PREFIX}/login`, body, {
+  const login = async (email: string, password: string): Promise<AuthResult> => {
+    const res = await postJson<AuthSuccessResponse>(`${AUTH_PREFIX}/login`, { email, password }, {
       token: null,
     });
 
@@ -190,6 +197,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: true, user: normalized };
   };
 
+  /**
+   * The API answers identically whether or not the address is registered, so
+   * there is nothing here to branch on — that is deliberate, and the UI must not
+   * try to infer existence from the response.
+   */
+  const requestPasswordReset = async (email: string): Promise<SimpleResult> => {
+    const res = await postJson<{ success: boolean; message: string }>(
+      `${AUTH_PREFIX}/forgot-password`,
+      { email },
+      { token: null }
+    );
+    if (!res.ok) return { success: false, error: res.error };
+    return { success: true, message: res.data.message };
+  };
+
+  const verifyResetToken = async (token: string) => {
+    const res = await getJson<{ success: boolean; email: string }>(
+      `${AUTH_PREFIX}/reset-password?token=${encodeURIComponent(token)}`,
+      { token: null }
+    );
+    if (!res.ok) return { success: false as const, error: res.error };
+    return { success: true as const, email: res.data.email };
+  };
+
+  const resetPassword = async (token: string, password: string): Promise<SimpleResult> => {
+    const res = await postJson<{ success: boolean; message: string }>(
+      `${AUTH_PREFIX}/reset-password`,
+      { token, password },
+      { token: null }
+    );
+    if (!res.ok) return { success: false, error: res.error };
+
+    // The server revoked every existing session for this account, so drop any
+    // stale local copy rather than leaving a token that will 401 on next use.
+    localStorage.removeItem(STORAGE_USER);
+    localStorage.removeItem(STORAGE_TOKEN);
+    setUser(null);
+
+    return { success: true, message: res.data.message };
+  };
+
   const logout = async () => {
     const token = localStorage.getItem(STORAGE_TOKEN);
     try {
@@ -227,6 +275,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         signup,
         oauthLogin,
+        requestPasswordReset,
+        verifyResetToken,
+        resetPassword,
         logout,
         isAuthenticated: !!user,
       }}

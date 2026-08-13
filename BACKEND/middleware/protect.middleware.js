@@ -27,14 +27,28 @@ const protect = async (req, res, next) => {
         // Find user by ID from token payload - using Prisma instead of Mongoose
         const user = await prisma.user.findUnique({
             where: { id: decoded.id },
-            select: { id: true, name: true, email: true, role: true, dob: true, country: true, idType: true, idNumber: true, createdAt: true }
+            select: { id: true, name: true, email: true, role: true, dob: true, country: true, idType: true, idNumber: true, createdAt: true, passwordChangedAt: true }
         });
-        
+
         if (!user) {
             return res.status(401).json({
                 success: false,
                 message: "Unauthorized: User not found",
             });
+        }
+
+        // A token minted before the last password change is dead. This is what
+        // makes "reset my password" actually evict an attacker who already holds
+        // a valid session, instead of leaving it live until natural expiry.
+        // `iat` is in seconds, so compare on second granularity.
+        if (user.passwordChangedAt && decoded.iat) {
+            const changedAtSec = Math.floor(user.passwordChangedAt.getTime() / 1000);
+            if (decoded.iat < changedAtSec) {
+                return res.status(401).json({
+                    success: false,
+                    message: "Unauthorized: Password was changed. Please log in again",
+                });
+            }
         }
 
         // Attach user to request object

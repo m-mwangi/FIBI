@@ -1,10 +1,12 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const path = require("path");
 const config = require("./config/env")
 const { prisma, connectDB, disconnectDB } = require('./config/db');
 const errorHandler = require('./middleware/error.middleware');
+const { globalLimiter } = require('./middleware/rate-limit.middleware');
 const { stripeWebhook } = require('./controllers/stripe.controller');
 
 //Import routes
@@ -70,6 +72,26 @@ app.use(
     })
 );
 
+// Security response headers: HSTS, X-Content-Type-Options, Referrer-Policy,
+// frame denial, and cross-origin isolation defaults.
+//
+// contentSecurityPolicy is off because this process serves JSON and uploaded
+// images, not HTML — the frontend's own CSP is set at the nginx edge, and a
+// second policy here would only apply to error pages.
+//
+// crossOriginResourcePolicy is relaxed to cross-origin so /uploads images can be
+// rendered by the frontend, which is served from a different origin.
+app.use(
+    helmet({
+        contentSecurityPolicy: false,
+        crossOriginResourcePolicy: { policy: 'cross-origin' },
+    })
+);
+
+// Blunt ceiling in front of everything. Per-endpoint limiters in
+// middleware/rate-limit.middleware.js do the precise work on auth routes.
+app.use(globalLimiter);
+
 // Stripe webhooks must receive the *raw* body for signature verification.
 // This route MUST be registered before `express.json()` middleware.
 app.post(
@@ -85,9 +107,16 @@ app.post(
     stripeWebhook
 );
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Body size caps. Unbounded parsing lets a single request pin memory and CPU;
+// no JSON endpoint here legitimately needs more than 100kb (file uploads go
+// through multer, which enforces its own limits).
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 app.use(cookieParser());
+
+// Express does not disclose its identity by default in v5, but the header is
+// still emitted by some middleware paths — drop it so the stack is not advertised.
+app.disable('x-powered-by');
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Basic route
