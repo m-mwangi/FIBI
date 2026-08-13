@@ -7,7 +7,7 @@
  * each replica will independently grant the full quota.
  */
 
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const { normalizeEmail } = require('../utils/email-validation.util');
 
 const jsonMessage = (error) => ({ success: false, error });
@@ -25,10 +25,16 @@ const base = {
  * alone lets an attacker deny service to a known victim by burning their quota.
  * Combining them means an attacker must control both axes to sustain guessing,
  * while a legitimate user retyping their own password is unaffected by others.
+ *
+ * `req.ip` must go through `ipKeyGenerator`, not be used raw. A single IPv6
+ * customer is routinely handed a whole /64, so keying on the exact address lets
+ * an attacker walk through addresses in their own prefix and get a fresh quota
+ * every time — the limiter would look active while enforcing nothing. The helper
+ * collapses IPv6 to its /56 subnet and passes IPv4 through unchanged.
  */
 const ipAndEmailKey = (req) => {
     const email = normalizeEmail(req.body && req.body.email) || 'anonymous';
-    return `${req.ip}|${email}`;
+    return `${ipKeyGenerator(req.ip)}|${email}`;
 };
 
 /**
