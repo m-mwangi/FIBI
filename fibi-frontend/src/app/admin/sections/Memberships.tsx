@@ -10,7 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import { getJson, patchJson, putJson, MEMBERSHIP_PREFIX } from '@/lib/api';
-import { MEMBERSHIP_TIER_ORDER, type MembershipTier } from '@/lib/membership';
+import { MEMBERSHIP_TIER_ORDER, tierLabel, type MembershipTier } from '@/lib/membership';
 import { useMembership } from '../../context/MembershipContext';
 import { useAdminData } from '../lib/AdminDataContext';
 import { useTableState } from '../lib/useTableState';
@@ -21,12 +21,18 @@ import {
   Flash,
   PageHeader,
   Panel,
+  Segmented,
   StatCard,
   StatusPill,
 } from '../components/primitives';
+import { PlansPanel } from './membership/PlansPanel';
+import { EventsPanel } from './membership/EventsPanel';
+import { InvoicesPanel } from './membership/InvoicesPanel';
 import { CHART_COLORS, formatDate, formatRelative } from '../lib/format';
 import type { FeatureRow, MembershipApplicationRow, MembershipRow } from '../lib/types';
 import { Button } from '../../components/ui/button';
+import { Switch } from '../../components/ui/switch';
+import { Textarea } from '../../components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -42,8 +48,18 @@ const TIER_LABEL: Record<string, string> = {
   investor_plus: 'Investor Plus',
 };
 
+type Tab = 'review' | 'plans' | 'events' | 'invoices';
+
+const TABS: { value: Tab; label: string }[] = [
+  { value: 'review', label: 'Members' },
+  { value: 'plans', label: 'Plans' },
+  { value: 'events', label: 'Events' },
+  { value: 'invoices', label: 'Invoices' },
+];
+
 export default function Memberships() {
-  const { refreshMembership } = useMembership();
+  const { refreshMembership, refreshCatalogue } = useMembership();
+  const [tab, setTab] = useState<Tab>('review');
   const { applications: sharedApplications, refreshApplications, refreshAudit } = useAdminData();
   const [state, set] = useTableState();
 
@@ -56,6 +72,9 @@ export default function Memberships() {
   const [flash, setFlash] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [featuresDirty, setFeaturesDirty] = useState(false);
   const [approveTier, setApproveTier] = useState<Record<string, MembershipTier>>({});
+  // Per-application reviewer note and "activate without charging" flag.
+  const [feedback, setFeedback] = useState<Record<string, string>>({});
+  const [comp, setComp] = useState<Record<string, boolean>>({});
 
   const tierFilter = state.filter;
 
@@ -133,7 +152,14 @@ export default function Memberships() {
     setFlash(null);
     const res = await patchJson<{ success: boolean }>(
       `${MEMBERSHIP_PREFIX}/admin/applications/${id}`,
-      { action, ...(action === 'approve' && tier ? { tier } : {}) }
+      {
+        action,
+        ...(action === 'approve' && tier ? { tier } : {}),
+        // Approval normally grants entry and leaves the member to pay.
+        // Complimentary activates the tier outright, for staff and comps.
+        ...(action === 'approve' && comp[id] ? { complimentary: true } : {}),
+        ...(feedback[id]?.trim() ? { adminFeedback: feedback[id].trim() } : {}),
+      }
     );
     setBusy(false);
     if (!res.ok) {
@@ -142,8 +168,14 @@ export default function Memberships() {
     }
     setFlash({
       type: 'ok',
-      text: `Application ${action === 'approve' ? 'approved' : 'rejected'}.`,
+      text:
+        action === 'approve'
+          ? comp[id]
+            ? 'Approved and activated — no charge.'
+            : 'Approved. The applicant has been emailed to activate and pay.'
+          : 'Application rejected — the applicant has been emailed.',
     });
+    setFeedback((prev) => ({ ...prev, [id]: '' }));
     await afterWrite();
   };
 
@@ -277,8 +309,16 @@ export default function Memberships() {
         <StatCard label="Pending review" value={stats.pending} icon={Clock} tone="amber" hint="Applications waiting" loading={loading} />
       </div>
 
+      <div className="mb-5">
+        <Segmented options={TABS} value={tab} onChange={setTab} />
+      </div>
+
+      {tab === 'plans' && <PlansPanel onSaved={() => void refreshCatalogue()} />}
+      {tab === 'events' && <EventsPanel />}
+      {tab === 'invoices' && <InvoicesPanel />}
+
       {/* Tier mix */}
-      {stats.total > 0 && (
+      {tab === 'review' && stats.total > 0 && (
         <Panel title="Tier distribution" description="How the member base splits across tiers" className="mb-5">
           <div className="flex h-3 w-full overflow-hidden rounded-full bg-slate-100">
             {tierMix.map((t) =>
@@ -304,6 +344,8 @@ export default function Memberships() {
         </Panel>
       )}
 
+      {tab === 'review' && (
+      <>
       <Panel
         title="Pending applications"
         description={pending.length === 0 ? 'Nothing waiting on you.' : `${pending.length} awaiting review`}
@@ -351,10 +393,21 @@ export default function Memberships() {
                     ))}
                   </dl>
 
+                  {/* The note is emailed to the applicant with the decision, so
+                      a rejection is not a silent dead end. */}
+                  <Textarea
+                    value={feedback[a.id] ?? ''}
+                    onChange={(e) =>
+                      setFeedback((prev) => ({ ...prev, [a.id]: e.target.value }))
+                    }
+                    placeholder="Note to the applicant (emailed with the decision) — optional"
+                    className="mt-4 min-h-[60px] rounded-lg text-sm"
+                  />
+
                   {/* One approve button plus a tier picker, replacing the two
                       hardcoded "Approve as Basic/Premium" buttons that could
                       never reach the other two tiers. */}
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     <Select
                       value={tier}
                       onValueChange={(v) =>
@@ -372,6 +425,17 @@ export default function Memberships() {
                         ))}
                       </SelectContent>
                     </Select>
+
+                    <label className="flex items-center gap-2 rounded-lg border border-[var(--adm-line)] px-3 py-1.5 text-xs text-slate-600">
+                      <Switch
+                        checked={comp[a.id] ?? false}
+                        onCheckedChange={(checked) =>
+                          setComp((prev) => ({ ...prev, [a.id]: checked }))
+                        }
+                      />
+                      Complimentary
+                    </label>
+
                     <Button
                       size="sm"
                       className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
@@ -389,6 +453,12 @@ export default function Memberships() {
                     >
                       <X className="h-4 w-4" /> Reject
                     </Button>
+
+                    <p className="ml-auto text-xs text-slate-400">
+                      {comp[a.id]
+                        ? `Activates ${tierLabel(tier)} immediately, no charge`
+                        : `Approved for ${tierLabel(tier)} — activates when they pay`}
+                    </p>
                   </div>
                 </li>
               );
@@ -514,6 +584,8 @@ export default function Memberships() {
           </div>
         )}
       </Panel>
+      </>
+      )}
     </>
   );
 }

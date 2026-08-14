@@ -66,7 +66,8 @@ import {
 } from '@/lib/users';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { MEMBERSHIP_PLANS } from '@/lib/membership';
+import { tierLabel } from '@/lib/membership';
+import { MembershipStatusCard } from '../components/membership/MembershipStatus';
 
 type ApiInvestment = {
   id: string;
@@ -140,7 +141,7 @@ function formatCategory(slug: string) {
 
 export default function UserDashboard() {
   const { user, logout, refreshUser } = useAuth();
-  const { membership, refreshMembership } = useMembership();
+  const { membership, stage: membershipStage, refreshMembership } = useMembership();
   const navigate = useNavigate();
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
@@ -1411,18 +1412,17 @@ export default function UserDashboard() {
                       <CardTitle className="text-lg font-semibold">Membership</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <p className="text-sm text-slate-600">
-                        Tier: <span className="font-medium capitalize">{membership.tier.replace('_', ' ')}</span>
-                      </p>
+                      {/* The same stage card the membership pages use, so the
+                          dashboard cannot tell a different story. */}
+                      <MembershipStatusCard membership={membership} stage={membershipStage} compact />
                       <p className="text-xs text-slate-500">
-                        Status: <span className="capitalize">{membership.status}</span> · Application{" "}
-                        <span className="capitalize">{membership.applicationStatus}</span>
+                        Tier: <span className="font-medium">{tierLabel(membership.tier)}</span>
+                        {membership.renewalDate && membership.status === 'active' && (
+                          <> · renews {new Date(membership.renewalDate).toLocaleDateString()}</>
+                        )}
                       </p>
                       <Button type="button" variant="outline" className="w-full h-10 rounded-xl" asChild>
-                        <Link to="/membership">View plans</Link>
-                      </Button>
-                      <Button type="button" variant="outline" className="w-full h-10 rounded-xl" asChild>
-                        <Link to="/member-hub">Open member hub</Link>
+                        <Link to="/membership/billing">Membership &amp; billing</Link>
                       </Button>
                       <Button
                         type="button"
@@ -1432,9 +1432,6 @@ export default function UserDashboard() {
                       >
                         Refresh status
                       </Button>
-                      <p className="text-[11px] text-slate-400">
-                        Plans available: {MEMBERSHIP_PLANS.map((plan) => plan.name).join(", ")}
-                      </p>
                     </CardContent>
                   </Card>
                 </div>

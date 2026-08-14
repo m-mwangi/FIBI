@@ -1,12 +1,20 @@
 import { Link } from "react-router";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Crown, ShieldCheck, Star, Users, Quote } from "lucide-react";
+import { CheckCircle2, Crown, Quote, ShieldCheck, Users } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useMembership } from "../context/MembershipContext";
-import { MEMBERSHIP_FEATURE_LABELS, MEMBERSHIP_PLANS } from "@/lib/membership";
+import { featureLabel, tierLabel } from "@/lib/membership";
+import { PlanGrid } from "../components/membership/PlanGrid";
+import { MembershipStatusCard } from "../components/membership/MembershipStatus";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "../components/ui/accordion";
 
 const HERO_IMAGES = [
   "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?auto=format&fit=crop&w=1600&q=80",
@@ -36,18 +44,32 @@ const TESTIMONIALS = [
   },
 ];
 
-const PREMIUM_BENEFITS = [
-  "Daily access to member spaces",
-  "Weekly founder and industry calls",
-  "Private member group chats",
-  "Wellness and productivity guidance",
-  "Member-only events and gatherings",
-  "Priority reservations and guest passes",
+const FAQ = [
+  {
+    q: "How do I apply?",
+    a: "Submit the online application. The membership team reviews every application and emails you a decision. Once approved, you choose a tier and activate.",
+  },
+  {
+    q: "When am I charged?",
+    a: "Only after you're approved and choose a tier. Approval alone costs nothing, and no tier is granted until a payment settles.",
+  },
+  {
+    q: "Can I upgrade, downgrade, or cancel?",
+    a: "Yes, all from the billing page. Upgrades take effect once payment settles. Cancelling stops future billing and you keep full access to the end of the period you already paid for.",
+  },
+  {
+    q: "What happens when my membership expires?",
+    a: "Access to member-only features and events ends at the period date. Your account and history stay intact, and you can renew at any time.",
+  },
+  {
+    q: "Are there member-only events?",
+    a: "Yes. Each event sets a minimum tier. You'll see upcoming events on the member hub, with full details and booking for the ones your tier covers.",
+  },
 ];
 
 export default function MembershipLanding() {
   const { isAuthenticated } = useAuth();
-  const { membership } = useMembership();
+  const { membership, stage, plans, featureGates, latestApplication } = useMembership();
   const [heroIndex, setHeroIndex] = useState(0);
 
   useEffect(() => {
@@ -57,9 +79,17 @@ export default function MembershipLanding() {
     return () => window.clearInterval(timer);
   }, []);
 
+  // The cheapest paid plan anchors the hero, so the headline price tracks the
+  // plans table instead of being a number typed into the page.
+  const entryPlan = plans.filter((p) => p.monthlyPriceMinor > 0).sort(
+    (a, b) => a.monthlyPriceMinor - b.monthlyPriceMinor
+  )[0];
+
+  const applyHref = isAuthenticated ? "/membership/apply" : "/login";
+
   return (
     <div className="min-h-screen bg-white">
-      <section className="relative min-h-[84vh] pt-20 flex items-center overflow-hidden">
+      <section className="relative flex min-h-[78vh] items-center overflow-hidden pt-20">
         <div className="absolute inset-0">
           {HERO_IMAGES.map((image, index) => (
             <div
@@ -68,165 +98,188 @@ export default function MembershipLanding() {
               style={{ backgroundImage: `url(${image})` }}
             />
           ))}
-          <div className="absolute inset-0 bg-black/55" />
+          <div className="absolute inset-0 bg-slate-950/60" />
         </div>
-        <div className="relative max-w-6xl mx-auto px-4 text-white text-center">
-          <Badge className="bg-white/15 border border-white/30 text-white hover:bg-white/20">
-            100+ active members
+
+        <div className="relative mx-auto max-w-5xl px-4 text-center text-white">
+          <Badge className="border border-white/30 bg-white/15 text-white hover:bg-white/20">
+            Application-only membership
           </Badge>
-          <h1 className="text-4xl md:text-6xl font-bold mt-4 tracking-tight">
-            Become a FIBI In-Person Member
+          <h1 className="mt-4 text-4xl font-bold tracking-tight md:text-6xl">
+            Become a FIBI Member
           </h1>
-          <p className="max-w-3xl mx-auto mt-4 text-white/90 text-lg">
-            Access exclusive spaces, member-only events, and weekly founder calls through an application-first
-            membership built for quality community.
+          <p className="mx-auto mt-4 max-w-2xl text-lg text-white/90">
+            Exclusive spaces, member-only events, and weekly founder calls — with every application
+            reviewed so the room stays worth being in.
           </p>
-          <div className="mt-8 flex justify-center gap-3 flex-wrap">
-            <Link to={isAuthenticated ? "/membership/apply" : "/login"}>
-              <Button className="bg-emerald-600 hover:bg-emerald-700 px-8">
+          {entryPlan && (
+            <p className="mt-3 text-sm text-white/70">
+              Tiers from {tierLabel(entryPlan.tier)} · reviewed before activation
+            </p>
+          )}
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            <Link to={applyHref}>
+              <Button className="bg-emerald-600 px-8 hover:bg-emerald-700">
                 {isAuthenticated ? "Apply for membership" : "Log in to apply"}
               </Button>
             </Link>
-            <Link to="/member-hub">
-              <Button variant="outline" className="border-white text-white bg-white/10 hover:bg-white/20">
-                Explore member hub
+            <a href="#plans">
+              <Button variant="outline" className="border-white bg-white/10 text-white hover:bg-white/20">
+                Compare tiers
               </Button>
-            </Link>
+            </a>
           </div>
         </div>
       </section>
 
-      <div className="max-w-6xl mx-auto px-4 py-14">
+      <div className="mx-auto max-w-6xl px-4 py-14">
+        {/* A signed-in visitor sees their own standing before the marketing. */}
+        {isAuthenticated && (
+          <section className="mb-12">
+            <MembershipStatusCard
+              membership={membership}
+              stage={stage}
+              feedback={latestApplication?.adminFeedback}
+            />
+          </section>
+        )}
+
         <section className="text-center">
-          <h2 className="text-3xl font-bold text-slate-900">How It Works</h2>
-          <div className="grid md:grid-cols-3 gap-4 mt-8">
-            <Card>
-              <CardHeader><CardTitle>1. Apply</CardTitle></CardHeader>
-              <CardContent className="text-sm text-slate-600">
-                Submit your application and share your goals, interests, and contribution fit.
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>2. Meet the Team</CardTitle></CardHeader>
-              <CardContent className="text-sm text-slate-600">
-                We review fit and community alignment, then schedule your welcome call.
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>3. Unlock Access</CardTitle></CardHeader>
-              <CardContent className="text-sm text-slate-600">
-                Once approved, you unlock member spaces, events, and private channels.
-              </CardContent>
-            </Card>
-          </div>
-        </section>
-
-        <section className="grid md:grid-cols-3 gap-4 mt-14">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <ShieldCheck className="h-5 w-5 text-emerald-600" />
-                Application-only entry
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-slate-600">
-              Protect quality and trust by reviewing applicants before premium access is granted.
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Users className="h-5 w-5 text-emerald-600" />
-                Community-first value
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-slate-600">
-              Network in verified groups, private channels, and exclusive events with peers.
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Crown className="h-5 w-5 text-emerald-600" />
-                Tiered progression
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-slate-600">
-              Unlock more benefits over time, from member basics to Investor+ deal flow.
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className="mt-14">
-          <h2 className="text-3xl font-bold text-slate-900 text-center">Your place to step away from the noise</h2>
-          <p className="text-slate-600 text-center mt-3 max-w-3xl mx-auto">
-            Fresh air, open space, and a focused community help reduce stress, improve clarity, and make work feel meaningful again.
-          </p>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
-            {EXPERIENCE_IMAGES.map((image) => (
-              <div key={image} className="rounded-2xl overflow-hidden border">
-                <img src={image} alt="Membership experience" className="h-52 w-full object-cover" />
-              </div>
-            ))}
-          </div>
-          <div className="flex justify-center gap-2 mt-4">
-            {EXPERIENCE_IMAGES.map((_, idx) => (
-              <span key={idx} className={`h-1.5 rounded-full ${idx === 0 ? "w-8 bg-emerald-600" : "w-2 bg-slate-300"}`} />
+          <h2 className="text-3xl font-bold text-slate-900">How it works</h2>
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            {[
+              {
+                step: "1",
+                title: "Apply",
+                body: "Tell us your goals, the experiences you want, and how you'll contribute.",
+              },
+              {
+                step: "2",
+                title: "Get reviewed",
+                body: "The membership team reviews fit and community alignment, then emails a decision.",
+              },
+              {
+                step: "3",
+                title: "Activate",
+                body: "Choose your tier and pay. Access to spaces, events, and channels opens immediately.",
+              },
+            ].map((item) => (
+              <Card key={item.step} className="text-left">
+                <CardHeader>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-sm font-bold text-emerald-700">
+                    {item.step}
+                  </span>
+                  <CardTitle className="mt-2 text-lg">{item.title}</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-slate-600">{item.body}</CardContent>
+              </Card>
             ))}
           </div>
         </section>
 
-        <section className="grid lg:grid-cols-4 gap-4 mt-14">
-          {MEMBERSHIP_PLANS.map((plan) => (
-            <Card
-              key={plan.tier}
-              className={plan.highlighted ? "ring-2 ring-emerald-500 border-emerald-300" : ""}
-            >
+        <section className="mt-14 grid gap-4 md:grid-cols-3">
+          {[
+            {
+              icon: ShieldCheck,
+              title: "Application-only entry",
+              body: "Every applicant is reviewed before any tier is granted, which is what keeps the community's quality and trust.",
+            },
+            {
+              icon: Users,
+              title: "Community-first value",
+              body: "Verified groups, private channels, and events with peers who are building the same kinds of things.",
+            },
+            {
+              icon: Crown,
+              title: "Tiered progression",
+              body: "Move up as you go, from member basics through to Investor+ deal flow — change tiers whenever you like.",
+            },
+          ].map((item) => (
+            <Card key={item.title}>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>{plan.name}</CardTitle>
-                  {plan.highlighted && (
-                    <Badge variant="outline" className="border-emerald-300 text-emerald-700">
-                      Popular
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-2xl font-semibold text-slate-900">
-                  ${plan.monthlyPrice}
-                  <span className="text-sm font-normal text-slate-500">/mo</span>
-                </p>
-                <p className="text-sm text-slate-600">{plan.description}</p>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <item.icon className="h-5 w-5 text-emerald-600" />
+                  {item.title}
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
-                {plan.features.length === 0 ? (
-                  <p className="text-sm text-slate-500">Public access only</p>
-                ) : (
-                  plan.features.map((feature) => (
-                    <p key={feature} className="text-sm text-slate-700 flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
-                      {MEMBERSHIP_FEATURE_LABELS[feature]}
-                    </p>
-                  ))
-                )}
-                <div className="pt-3">
-                  <Link to={isAuthenticated ? "/membership/apply" : "/login"}>
-                    <Button className="w-full" variant={plan.highlighted ? "default" : "outline"}>
-                      {membership.tier === plan.tier ? "Current tier" : "Join " + plan.name}
-                    </Button>
-                  </Link>
-                </div>
-              </CardContent>
+              <CardContent className="text-sm text-slate-600">{item.body}</CardContent>
             </Card>
           ))}
         </section>
 
-        <section className="mt-14 grid md:grid-cols-2 gap-4">
+        <section className="mt-14">
+          <h2 className="text-center text-3xl font-bold text-slate-900">
+            Your place to step away from the noise
+          </h2>
+          <p className="mx-auto mt-3 max-w-3xl text-center text-slate-600">
+            Fresh air, open space, and a focused community help reduce stress, improve clarity, and
+            make work feel meaningful again.
+          </p>
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {EXPERIENCE_IMAGES.map((image) => (
+              <div key={image} className="overflow-hidden rounded-2xl border">
+                <img
+                  src={image}
+                  alt="Membership experience"
+                  loading="lazy"
+                  className="h-52 w-full object-cover transition-transform duration-500 hover:scale-105"
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section id="plans" className="mt-16 scroll-mt-24">
+          <div className="text-center">
+            <h2 className="text-3xl font-bold text-slate-900">Choose your tier</h2>
+            <p className="mt-2 text-slate-600">
+              Every tier is billed monthly. Applications are reviewed before activation.
+            </p>
+          </div>
+          <div className="mt-8">
+            <PlanGrid
+              plans={plans}
+              membership={membership}
+              stage={stage}
+              isAuthenticated={isAuthenticated}
+            />
+          </div>
+        </section>
+
+        {/* What each gate actually requires, straight from the gate table the
+            admin console edits — so this section cannot drift from reality. */}
+        {featureGates.length > 0 && (
+          <section className="mt-14">
+            <Card>
+              <CardHeader>
+                <CardTitle>What each tier unlocks</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+                  {featureGates.map((gate) => (
+                    <li key={gate.featureKey} className="flex items-start justify-between gap-3">
+                      <span className="flex items-start gap-2 text-sm text-slate-700">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                        {featureLabel(gate.featureKey)}
+                      </span>
+                      <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                        {tierLabel(gate.minTier)}+
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          </section>
+        )}
+
+        <section className="mt-14 grid gap-4 md:grid-cols-2">
           {TESTIMONIALS.map((testimonial) => (
             <Card key={testimonial.name}>
               <CardContent className="pt-6">
-                <Quote className="h-5 w-5 text-emerald-600 mb-2" />
+                <Quote className="mb-2 h-5 w-5 text-emerald-600" />
                 <p className="text-slate-700">"{testimonial.quote}"</p>
-                <p className="text-sm text-slate-900 font-semibold mt-3">{testimonial.name}</p>
+                <p className="mt-3 text-sm font-semibold text-slate-900">{testimonial.name}</p>
                 <p className="text-xs text-slate-500">{testimonial.role}</p>
               </CardContent>
             </Card>
@@ -234,107 +287,33 @@ export default function MembershipLanding() {
         </section>
 
         <section className="mt-14">
-          <Card className="overflow-hidden border-emerald-200">
-            <div className="grid lg:grid-cols-2">
-              <div className="p-8 md:p-10 bg-white">
-                <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">Unlimited Access</p>
-                <h3 className="text-3xl font-bold text-slate-900 mt-2">Join the FIBI Membership</h3>
-                <p className="text-slate-600 mt-3">
-                  Access a curated community and premium resources under one membership.
-                </p>
-                <p className="text-4xl font-bold text-slate-900 mt-6">
-                  $59<span className="text-base text-slate-500 font-normal"> / month</span>
-                </p>
-                <p className="text-xs text-slate-500 mt-1">Application review required before activation.</p>
-                <div className="mt-6">
-                  <Link to={isAuthenticated ? "/membership/apply" : "/login"}>
-                    <Button className="bg-emerald-600 hover:bg-emerald-700 px-8">
-                      {isAuthenticated ? "Apply for Membership" : "Log in to Apply"}
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-              <div className="p-8 md:p-10 bg-emerald-50 border-t lg:border-t-0 lg:border-l border-emerald-100">
-                <h4 className="text-lg font-semibold text-slate-900">Included Benefits</h4>
-                <div className="space-y-2 mt-4">
-                  {PREMIUM_BENEFITS.map((benefit) => (
-                    <p key={benefit} className="text-sm text-slate-700 flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
-                      {benefit}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </Card>
+          <h2 className="text-center text-3xl font-bold text-slate-900">Frequently asked</h2>
+          <Accordion type="single" collapsible className="mx-auto mt-6 max-w-3xl">
+            {FAQ.map((item) => (
+              <AccordionItem key={item.q} value={item.q}>
+                <AccordionTrigger className="text-left text-base font-medium">
+                  {item.q}
+                </AccordionTrigger>
+                <AccordionContent className="text-slate-600">{item.a}</AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
         </section>
 
-        <section className="mt-12">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Star className="h-5 w-5 text-emerald-600" />
-                Trust and social proof
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-slate-600 grid md:grid-cols-3 gap-4">
-              <p>Verified member badges highlight trusted contributors in the community.</p>
-              <p>Monthly member spotlights and testimonials help applicants understand value.</p>
-              <p>Founder Q&A calls create direct access and a stronger insider experience.</p>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className="mt-12">
-          <Card className="mb-8 bg-slate-900 text-white border-slate-800">
-            <CardContent className="py-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <p className="text-sm text-slate-300">Prefer virtual access?</p>
-                <h3 className="text-2xl font-semibold">Join weekly from anywhere</h3>
-                <p className="text-slate-300 text-sm mt-1">
-                  Virtual membership includes live calls, recordings, and private online community channels.
-                </p>
-              </div>
-              <Link to={isAuthenticated ? "/membership/apply" : "/login"}>
-                <Button variant="outline" className="border-white text-white bg-transparent hover:bg-white/10">
-                  Join Virtual Membership
+        <section className="mt-14">
+          <Card className="border-emerald-200 bg-emerald-50/60">
+            <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+              <h3 className="text-2xl font-bold text-slate-900">Ready to join?</h3>
+              <p className="max-w-xl text-slate-600">
+                Applications take a few minutes. You'll hear back from the membership team by email.
+              </p>
+              <Link to={applyHref}>
+                <Button className="bg-emerald-600 px-8 hover:bg-emerald-700">
+                  {isAuthenticated ? "Start your application" : "Log in to apply"}
                 </Button>
               </Link>
             </CardContent>
           </Card>
-
-          <h2 className="text-3xl font-bold text-slate-900 text-center">Frequently Asked Questions</h2>
-          <div className="mt-6 space-y-3">
-            {[
-              {
-                q: "How do I apply?",
-                a: "Start with the online application, then complete a short fit call with our membership team before final approval.",
-              },
-              {
-                q: "What does membership include?",
-                a: "Private events, founder sessions, member-only content, curated networking, and premium service benefits by tier.",
-              },
-              {
-                q: "Are there member-only events?",
-                a: "Yes. Approved members gain access to regular private events, workshops, and curated networking gatherings.",
-              },
-              {
-                q: "Can I upgrade, downgrade, or cancel?",
-                a: "Yes. Your membership lifecycle supports upgrades, downgrades, renewals, expirations, and cancellations.",
-              },
-              {
-                q: "Do members also get virtual access?",
-                a: "Yes. Higher tiers include virtual calls, Q&A sessions, and recordings in addition to in-person and platform benefits.",
-              },
-            ].map((item) => (
-              <Card key={item.q}>
-                <CardHeader>
-                  <CardTitle className="text-lg">{item.q}</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-slate-600">{item.a}</CardContent>
-              </Card>
-            ))}
-          </div>
         </section>
       </div>
     </div>

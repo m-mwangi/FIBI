@@ -22,6 +22,7 @@ const paymentMethodsRoutes = require('./routes/payment-methods.routes');
 const paymentResponsesRoutes = require('./routes/payment-responses.routes');
 const stripeRoutes = require('./routes/stripe.routes');
 const membershipRoutes = require('./routes/membership.routes');
+const { bootstrapMembership, expireDueMemberships } = require('./services/membership.service');
 const adminRoutes = require('./routes/admin.routes');
 
 const app = express();
@@ -180,6 +181,26 @@ app.use(errorHandler);
 const server = app.listen(port, () => {
     console.log(`Server is running on http://localhost:${port}`);
 });
+
+// Membership plans and feature gates are seeded once at boot rather than lazily
+// on first request, so a fresh database serves a real pricing page immediately.
+bootstrapMembership();
+
+// A membership is only really expired once the database says so. The sweep runs
+// hourly; single-row reads also expire lazily, so this is a backstop for rows
+// nobody is looking at rather than the only mechanism.
+const MEMBERSHIP_SWEEP_MS = 60 * 60 * 1000;
+const membershipSweep = setInterval(() => {
+    expireDueMemberships()
+        .then(({ expired, canceled }) => {
+            if (expired || canceled) {
+                console.log(`[fibi] membership sweep: ${expired} expired, ${canceled} canceled`);
+            }
+        })
+        .catch((e) => console.error('[fibi] membership sweep failed:', e.message));
+}, MEMBERSHIP_SWEEP_MS);
+// Do not hold the process open for a timer.
+membershipSweep.unref();
 
 // `docker compose up -d --build` sends SIGTERM and waits 10s before SIGKILL.
 // Draining in-flight requests and closing the Prisma pool here avoids dropped

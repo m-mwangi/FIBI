@@ -24,6 +24,10 @@ export type MembershipDto = {
   applicationStatus: "none" | "pending" | "approved" | "rejected";
   renewalDate: string | null;
   badgeLabel: string | null;
+  startedAt?: string | null;
+  canceledAt?: string | null;
+  pendingTier?: "free" | "basic" | "premium" | "investor_plus" | null;
+  daysRemaining?: number | null;
 };
 
 export type AuthSuccessResponse = {

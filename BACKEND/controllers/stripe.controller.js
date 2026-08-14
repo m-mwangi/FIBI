@@ -1,6 +1,10 @@
 const { prisma } = require('../config/db');
 const { getAdapter } = require('../payments');
 const { recordInvestmentSettled } = require('../services/ledger.service');
+const {
+    applySettledMembershipPayment,
+    failMembershipInvoiceFor,
+} = require('../services/membershipBilling.service');
 
 /**
  * Payment callbacks.
@@ -78,7 +82,22 @@ async function settlePayment(event) {
             },
         });
 
-        if (status !== 'succeeded') return;
+        if (status !== 'succeeded') {
+            // A failed or reversed payment must release whatever it was holding
+            // open, or the member sees an upgrade "pending" forever.
+            await failMembershipInvoiceFor(tx, payment);
+            return;
+        }
+
+        // A payment funds either an investment or a membership period. Dispatch
+        // on what it is attached to rather than assuming investment, which is
+        // what made membership fees unbillable before.
+        const settledMembership = await applySettledMembershipPayment(tx, {
+            payment,
+            eventId,
+            occurredAt: new Date(),
+        });
+        if (settledMembership) return;
 
         const investmentId = payment.investmentId;
         if (!investmentId) return;

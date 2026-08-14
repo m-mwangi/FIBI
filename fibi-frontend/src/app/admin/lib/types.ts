@@ -60,6 +60,47 @@ export type MembershipRow = {
 
 export type FeatureRow = { featureKey: string; minTier: string };
 
+export type MembershipPlanRow = {
+  id: string;
+  tier: string;
+  name: string;
+  /** Integer MINOR units (cents). */
+  monthlyPriceMinor: number;
+  currency: string;
+  description: string;
+  features: string[];
+  active: boolean;
+  sortOrder: number;
+};
+
+export type MemberEventRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  startsAt: string;
+  endsAt: string | null;
+  location: string | null;
+  minTier: string;
+  capacity: number | null;
+  imageUrl: string | null;
+  active: boolean;
+  registrationCount: number;
+};
+
+export type MembershipInvoiceRow = {
+  id: string;
+  tier: string;
+  amountMinor: number;
+  currency: string;
+  status: 'pending' | 'paid' | 'failed' | 'canceled';
+  periodStart: string;
+  periodEnd: string;
+  paidAt: string | null;
+  createdAt: string;
+  user: { id: string; name: string; email: string } | null;
+  payment: { id: string; provider: string; status: string } | null;
+};
+
 export type GlobalSettingsDTO = {
   id: string;
   platformName: string;

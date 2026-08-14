@@ -65,6 +65,7 @@ enum TransactionType {
   WITHDRAWAL
   INVESTMENT
   PAYOUT
+  MEMBERSHIP
 }
 
 // Transaction states
@@ -144,6 +145,16 @@ enum MembershipApplicationReviewStatus {
   rejected
 }
 
+// A membership period that has been billed for. `pending` covers the window
+// between "member picked a tier" and "money arrived" — on a wire that is days,
+// which is why the invoice is a row and not a field on UserMembership.
+enum MembershipInvoiceStatus {
+  pending
+  paid
+  failed
+  canceled
+}
+
 //////////////////////////////////////////////////////
 // USER TABLE
 //////////////////////////////////////////////////////
@@ -186,6 +197,7 @@ model User {
   payments Payment[] //One to many relationship with Payment
   paymentMethods PaymentMethod[] //One to many relationship with PaymentMethod
   membership                 UserMembership?
+  membershipInvoices         MembershipInvoice[]
   membershipApplications     MembershipApplication[]
   reviewedMembershipApplications MembershipApplication[] @relation("MembershipApplicationReviewer")
   memberEventRegistrations   MemberEventRegistration[]
@@ -599,6 +611,7 @@ model Payment {
   paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   responses PaymentResponse[]
   transactions Transaction[]
+  membershipInvoice MembershipInvoice?
 
   // Looking a payment up by its provider handle is the hot path in every
   // webhook and every statement match.
@@ -660,12 +673,58 @@ model UserMembership {
   tier                MembershipTier                 @default(free)
   status              MembershipSubscriptionStatus   @default(none)
   applicationStatus   MembershipApplicationReviewStatus @default(none)
+  // End of the paid period. Past this instant the membership is expired, and
+  // `expireDueMemberships` in membership.service is what makes that true in the
+  // database rather than only in the reader's head.
   renewalDate         DateTime?
   badgeLabel          String?
+
+  // When the member first became active. Kept separate from createdAt, which is
+  // when the row appeared — every signed-in user gets a row at `free`.
+  startedAt           DateTime?
+  // Set when the member cancels. The membership keeps its tier until
+  // `renewalDate` passes; cancelling is "do not bill me again", not "cut me off
+  // mid-period".
+  canceledAt          DateTime?
+  // Tier the member has paid to move to, applied when the invoice settles. An
+  // upgrade that is awaiting a wire must not grant access before the money.
+  pendingTier         MembershipTier?
+
   createdAt           DateTime                       @default(now())
   updatedAt           DateTime                       @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // The expiry sweep scans on this; without the index it is a full table scan
+  // on every tick.
+  @@index([status, renewalDate])
+}
+
+// One billed membership period. Created when a member starts checkout, settled
+// by the same `settlePayment` path that settles an investment — so a card and a
+// bank wire activate a membership through identical code.
+model MembershipInvoice {
+  id           String                  @id @default(uuid())
+  userId       String
+  tier         MembershipTier
+  // Money: integer MINOR units. See utils/money.js.
+  amountMinor  BigInt
+  currency     String                  @default("USD")
+  status       MembershipInvoiceStatus @default(pending)
+  // The period this invoice buys. Set at creation so a member can see what they
+  // are paying for before the money lands.
+  periodStart  DateTime
+  periodEnd    DateTime
+  paidAt       DateTime?
+  paymentId    String?                 @unique
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([status])
 }
 
 model MembershipApplication {
@@ -719,17 +778,25 @@ model MemberEvent {
   minTier     MembershipTier   @default(basic)
   capacity    Int?
   imageUrl    String?
+  // Cancelled or draft events stay in the table — registrations reference them
+  // and members should still see that the thing they booked was called off.
+  active      Boolean          @default(true)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
   registrations MemberEventRegistration[]
+
+  @@index([startsAt])
 }
 
 model MemberEventRegistration {
   id        String   @id @default(uuid())
   eventId   String
   userId    String
+  // "confirmed" | "canceled". Cancelling keeps the row so the unique pair still
+  // holds and a member can re-book without a duplicate-key error.
   status    String   @default("confirmed")
+  canceledAt DateTime?
   createdAt DateTime @default(now())
 
   event MemberEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)

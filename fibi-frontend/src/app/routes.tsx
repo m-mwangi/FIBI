@@ -22,6 +22,7 @@ import NotFound from './pages/NotFound';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import MembershipLanding from './pages/MembershipLanding';
 import MembershipApplication from './pages/MembershipApplication';
+import MembershipBilling from './pages/MembershipBilling';
 import MemberHub from './pages/MemberHub';
 
 export const router = createBrowserRouter([
@@ -38,6 +39,16 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <MembershipApplication />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        // Auth-only, not tier-gated: an expired or approved-but-unpaid member
+        // needs this page precisely because they have no tier yet.
+        path: 'membership/billing',
+        element: (
+          <ProtectedRoute>
+            <MembershipBilling />
           </ProtectedRoute>
         ),
       },

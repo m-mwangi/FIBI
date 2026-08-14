@@ -169,6 +169,43 @@ async function recordInvestmentSettled(tx, { idempotencyKey, userId, projectId, 
     });
 }
 
+/**
+ * Record a settled membership fee: money leaves the member and becomes platform
+ * revenue.
+ *
+ * Unlike an investment, this is not client money — the member is buying a
+ * service, so it lands in the platform's own account rather than in escrow.
+ */
+async function recordMembershipSettled(tx, { idempotencyKey, userId, tier, amountMinor, currency, paymentId, occurredAt }) {
+    const wallet = await getOrCreateAccount(tx, {
+        type: 'INVESTOR_WALLET',
+        currency,
+        ownerId: userId,
+    });
+    // An explicit owner id rather than the null the schema allows for
+    // platform-level accounts: `getOrCreateAccount` looks accounts up through
+    // the (type, ownerId, currency) unique, and Prisma rejects a null there —
+    // so an ownerless account can be created but never found again, which would
+    // mean a new revenue account per settlement.
+    const revenue = await getOrCreateAccount(tx, {
+        type: 'PLATFORM_FEE',
+        currency,
+        ownerId: 'platform:membership',
+        externalRef: 'membership-revenue',
+    });
+
+    return postEntry(tx, {
+        idempotencyKey,
+        description: `Membership fee settled (${tier})`,
+        occurredAt,
+        paymentId,
+        postings: [
+            credit(wallet.id, amountMinor, currency),
+            debit(revenue.id, amountMinor, currency),
+        ],
+    });
+}
+
 /** Current balance of an account, derived from its postings. */
 async function balanceOf(accountId) {
     const result = await prisma.ledgerPosting.aggregate({
@@ -205,6 +242,7 @@ module.exports = {
     getOrCreateAccount,
     postEntry,
     recordInvestmentSettled,
+    recordMembershipSettled,
     balanceOf,
     findUnbalancedEntries,
 };

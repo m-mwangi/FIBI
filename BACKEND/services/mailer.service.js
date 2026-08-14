@@ -119,4 +119,74 @@ async function sendPasswordResetEmail({ to, name, resetUrl, expiresInMinutes }) 
     return sendMail({ to, subject: 'Reset your FIBI password', text, html });
 }
 
-module.exports = { sendMail, sendPasswordResetEmail };
+const TIER_NAMES = {
+    free: 'Free',
+    basic: 'Basic',
+    premium: 'Premium',
+    investor_plus: 'Investor+',
+};
+
+/**
+ * Tell an applicant what an admin decided.
+ *
+ * Best-effort by design: the decision is already committed by the time this
+ * runs, and a mail outage must not turn an approval into a 500. Callers do not
+ * await it.
+ */
+async function sendMembershipDecisionEmail({ to, name, approved, tier, feedback, actionUrl }) {
+    const greeting = name ? `Hi ${name},` : 'Hi,';
+    const tierName = TIER_NAMES[tier] || tier || 'Member';
+
+    const subject = approved
+        ? 'Your FIBI membership application was approved'
+        : 'An update on your FIBI membership application';
+
+    const lead = approved
+        ? `Your application has been approved at the ${tierName} tier. The last step is to activate your membership.`
+        : 'After review, we are not moving forward with your application at this time.';
+
+    const text = [
+        greeting,
+        '',
+        lead,
+        feedback ? `\nNote from the review team:\n${feedback}` : '',
+        approved && actionUrl ? `\nActivate your membership:\n${actionUrl}` : '',
+        approved
+            ? ''
+            : '\nYou are welcome to apply again — tell us more about how you want to take part in the community.',
+        '',
+        '— FIBI',
+    ]
+        .filter((line) => line !== '')
+        .join('\n');
+
+    const html = `
+    <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#0f172a">
+      <p style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#047857;margin:0 0 8px;font-weight:600">FIBI</p>
+      <h1 style="font-size:22px;margin:0 0 16px">${approved ? 'Welcome to FIBI' : 'Application update'}</h1>
+      <p style="margin:0 0 12px;line-height:1.6;color:#334155">${escapeHtml(greeting)}</p>
+      <p style="margin:0 0 20px;line-height:1.6;color:#334155">${escapeHtml(lead)}</p>
+      ${
+          feedback
+              ? `<blockquote style="margin:0 0 20px;padding:12px 16px;background:#f8fafc;border-left:3px solid #cbd5e1;color:#475569;line-height:1.6">${escapeHtml(
+                    feedback
+                )}</blockquote>`
+              : ''
+      }
+      ${
+          approved && actionUrl
+              ? `<p style="margin:0 0 24px">
+                   <a href="${escapeHtml(actionUrl)}"
+                      style="display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:13px 26px;border-radius:12px;font-weight:600">
+                     Activate ${escapeHtml(tierName)} membership
+                   </a>
+                 </p>`
+              : ''
+      }
+      <p style="margin:0;color:#94a3b8;font-size:12px">— FIBI</p>
+    </div>`;
+
+    return sendMail({ to, subject, text, html });
+}
+
+module.exports = { sendMail, sendPasswordResetEmail, sendMembershipDecisionEmail };
