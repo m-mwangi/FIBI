@@ -12,6 +12,7 @@ import {
   LogOut,
   Menu,
   RefreshCw,
+  Scale,
   Search,
   Settings as SettingsIcon,
   TrendingUp,
@@ -68,6 +69,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { to: '/admin/projects', label: 'Projects', icon: FolderOpen },
       { to: '/admin/transactions', label: 'Transactions', icon: ChartColumn, badge: 'transactions' },
       { to: '/admin/memberships', label: 'Memberships', icon: BadgeCheck, badge: 'applications' },
+      { to: '/admin/reconciliation', label: 'Reconciliation', icon: Scale },
     ],
   },
   {

@@ -129,6 +129,12 @@ app.post(
 // Body size caps. Unbounded parsing lets a single request pin memory and CPU;
 // no JSON endpoint here legitimately needs more than 100kb (file uploads go
 // through multer, which enforces its own limits).
+// Statement imports carry a base64-encoded bank file, which routinely exceeds
+// the 100kb the rest of the API is capped at. Raised only for that one route,
+// so the tighter global limit still protects every other endpoint. The route
+// itself is admin-only, so this does not widen the unauthenticated surface.
+app.use('/api/v1/admin/statements', express.json({ limit: '10mb' }));
+
 app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 app.use(cookieParser());

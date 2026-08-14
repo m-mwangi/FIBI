@@ -221,9 +221,84 @@ model BankAccount {
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 
+  statements BankStatement[]
+
   // At most one active collection account per currency, so wire instructions
-  // are never ambiguous about where to send money.
+  // are never ambiguous about where to send money. That rule is a PARTIAL
+  // unique index, which Prisma's schema language cannot express — it lives in
+  // the Phase 2 migration SQL. Do not assume `migrate diff` knows about it.
   @@index([currency, purpose, active])
+}
+
+//////////////////////////////////////////////////////
+// BANK STATEMENTS / RECONCILIATION
+//////////////////////////////////////////////////////
+
+enum StatementLineStatus {
+  unmatched
+  matched
+  ignored
+}
+
+// One imported statement file.
+//
+// Reconciliation is not a stopgap for missing bank APIs — it is permanent.
+// Money arrives that no API announces: a mistyped reference, a correspondent
+// wire, a deposit made at a branch counter. A system that only sees payments it
+// initiated will silently lose investor money.
+model BankStatement {
+  id            String   @id @default(uuid())
+  bankAccountId String
+  filename      String
+  // CSV | MT940 | CAMT053
+  format        String
+  periodStart   DateTime?
+  periodEnd     DateTime?
+  importedById  String?
+  importedAt    DateTime @default(now())
+  lineCount     Int      @default(0)
+  // SHA-256 of the raw file. Unique, so re-uploading the same statement is
+  // rejected rather than duplicating every credit in it.
+  fileHash      String   @unique
+
+  bankAccount BankAccount     @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  lines       StatementLine[]
+
+  @@index([bankAccountId])
+  @@index([importedAt])
+}
+
+// One transaction line from a statement.
+model StatementLine {
+  id          String   @id @default(uuid())
+  statementId String
+  // Signed integer MINOR units: credits positive (money in), debits negative.
+  amountMinor BigInt
+  currency    String
+  valueDate   DateTime
+  // Raw text exactly as the bank sent it — never normalised in place, because
+  // the original is what an operator needs when investigating a break.
+  reference    String?
+  description  String?
+  counterparty String?
+
+  status           StatementLineStatus @default(unmatched)
+  matchedPaymentId String?
+  matchedAt        DateTime?
+  matchedById      String?
+  // Why this line was auto-matched, or why it could not be.
+  matchNote        String?
+
+  // Identity of the line within its statement, so a partially re-imported file
+  // cannot double-count a credit.
+  lineHash String
+
+  statement BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+
+  @@unique([statementId, lineHash])
+  @@index([status])
+  @@index([valueDate])
+  @@index([matchedPaymentId])
 }
 
 //////////////////////////////////////////////////////
@@ -524,6 +599,10 @@ model Payment {
   paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   responses PaymentResponse[]
   transactions Transaction[]
+
+  // Looking a payment up by its provider handle is the hot path in every
+  // webhook and every statement match.
+  @@index([provider, providerRef])
 }
 
 model PaymentResponse {

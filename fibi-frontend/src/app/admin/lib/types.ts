@@ -152,3 +152,64 @@ export const INSTITUTION_LABEL: Record<string, string> = {
   BANK_OF_SINGAPORE: 'Bank of Singapore',
   OTHER: 'Other',
 };
+
+/** A line from an imported bank statement, in the reconciliation queue. */
+export type StatementLineRow = {
+  id: string;
+  statementId: string;
+  /** Signed integer MINOR units: credits positive, debits negative. */
+  amountMinor: number;
+  currency: string;
+  valueDate: string;
+  reference: string | null;
+  description: string | null;
+  counterparty: string | null;
+  status: 'unmatched' | 'matched' | 'ignored';
+  matchedPaymentId: string | null;
+  matchedAt: string | null;
+  matchNote: string | null;
+  statement: {
+    filename: string;
+    format: string;
+    bankAccount: { label: string; bankName: string };
+  };
+  suggestedPayment: {
+    id: string;
+    providerRef: string | null;
+    amountMinor: number;
+    settledAmountMinor: number;
+    currency: string;
+    status: string;
+    user: { name: string; email: string } | null;
+    project: { title: string } | null;
+  } | null;
+};
+
+export type ReconciliationSummary = {
+  unmatched: number;
+  matched: number;
+  ignored: number;
+  /** Money that arrived and has not been attributed to anyone. */
+  unattributedCredits: number;
+  unattributedAmountMinor: number;
+};
+
+export type StatementLinesResponse = {
+  success: boolean;
+  summary: ReconciliationSummary;
+  lines: StatementLineRow[];
+};
+
+export type StatementRow = {
+  id: string;
+  filename: string;
+  format: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  importedAt: string;
+  lineCount: number;
+  bankAccount: { label: string; bankName: string; currency: string };
+};
+
+export const STATEMENTS_API = '/api/v1/admin/statements';
+export const STATEMENT_LINES_API = '/api/v1/admin/statement-lines';
