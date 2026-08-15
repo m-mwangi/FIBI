@@ -34,7 +34,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu';
-import logo from '../../assets/fibi_logo.svg';
+import { Wordmark } from '../components/Wordmark';
 import './admin.css';
 
 /**
@@ -98,11 +98,13 @@ function RailContent({
   return (
     <>
       <div className={`flex items-center py-6 ${collapsed ? 'justify-center px-3' : 'px-5'}`}>
+        {/* Collapsed, the rail is 76px wide — the wordmark at that width would be
+            five pixels tall. The monogram is the same artwork cropped to its F. */}
         <Link to="/" onClick={onNavigate} className="adm-focus inline-block" aria-label="FIBI home">
-          <img
-            src={logo}
-            alt="FIBI"
-            className={`adm-logo-invert h-auto ${collapsed ? 'w-9' : 'w-24'} transition-[width] duration-200`}
+          <Wordmark
+            size={collapsed ? 'sm' : 'md'}
+            tone="light"
+            variant={collapsed ? 'monogram' : 'full'}
           />
         </Link>
       </div>

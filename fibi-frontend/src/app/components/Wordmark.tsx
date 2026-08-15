@@ -1,52 +1,175 @@
-import logo from '../../assets/fibi_logo.svg';
-
 /**
- * The FIBI wordmark, cropped to its artwork.
+ * The FIBI wordmark.
  *
- * The source SVG is a 1280×853 canvas whose ink occupies only a middle band —
- * about 53% of the width and 24% of the height. Sizing the <img> by height
- * therefore renders the mark at a quarter of the size the class implies, which
- * is why it turned up either illegibly small (`h-8` in the auth panel) or
- * legible only by overflowing its bar (`h-40` in the site nav).
+ * Inline vector, coloured with `currentColor`. It used to be an <img> of
+ * `assets/fibi_logo.svg` recoloured with `filter: invert()`, which is what made
+ * the mark look soft in the site header — a filter forces the image onto its own
+ * compositing layer, and against the bar's `backdrop-blur` the edges smeared.
+ * Nothing is filtered now; `text-white` and `text-black` recolour the paths
+ * directly. Credit for the diagnosis: Peter's `LogoMark` on `fix-mobile-header`
+ * (see MOBILE-NAV-REVIEW.md).
  *
- * The fix is a fixed-size window with an oversized image centred inside it: the
- * transparent margin is clipped rather than eating the layout, and every
- * surface asks for a size instead of re-deriving the ratio.
+ * The paths are copied verbatim from `assets/fibi_logo.svg`, which stays in the
+ * tree as the artwork's source of truth. The canvas there is 1280x853 with the
+ * ink occupying only a middle band, so every variant below is a `viewBox` crop
+ * measured off the real geometry rather than a guessed one:
  *
- * Ink height per size — the number that actually matters visually:
- * xs 20px · sm 24px · md 30px · lg 40px · xl 56px.
+ *   full lockup (wordmark + tagline)  x 288.0-970.9  y 313.5-521.9
+ *   wordmark only                     x 288.0-933.1  y 313.5-413.1
+ *   F monogram                        x 288.0-435.0  y 313.5-413.1
+ *
+ * Height is the only dimension a caller sets; width follows from the viewBox,
+ * so a size change can never distort the mark.
  */
 
+const VIEWBOX = {
+  /** Wordmark over the "For Investors By Investors" line. The default lockup. */
+  full: '284 309.5 691 216.4',
+  /** Wordmark alone — for heights under ~20px, where the tagline turns to mush. */
+  mark: '284 309.5 653.1 107.6',
+  /** Single F. For rails and tiles too narrow to carry the wordmark. */
+  monogram: '284 309.5 155 107.6',
+} as const;
+
+/** Ink height in px. Width follows the artwork's own ratio. */
 const SIZES = {
-  xs: { box: 'h-6 w-20', img: 'h-[82px]' },
-  sm: { box: 'h-8 w-24', img: 'h-[98px]' },
-  md: { box: 'h-9 w-28', img: 'h-[123px]' },
-  lg: { box: 'h-12 w-36', img: 'h-[164px]' },
-  xl: { box: 'h-16 w-48', img: 'h-[229px]' },
+  xs: 'h-5',
+  sm: 'h-6',
+  md: 'h-[1.875rem]',
+  lg: 'h-10',
+  xl: 'h-14',
+} as const;
+
+const TONES = {
+  dark: 'text-black',
+  light: 'text-white',
 } as const;
 
 export type WordmarkSize = keyof typeof SIZES;
+export type WordmarkVariant = keyof typeof VIEWBOX;
 
 export function Wordmark({
   size = 'md',
-  /** `light` inverts the dark artwork for placement on a dark surface. */
+  /** `light` for placement on a dark surface. Ignored if `className` sets a text colour. */
   tone = 'dark',
+  variant = 'full',
   className = '',
 }: {
   size?: WordmarkSize;
   tone?: 'dark' | 'light';
+  variant?: WordmarkVariant;
   className?: string;
 }) {
-  const { box, img } = SIZES[size];
   return (
-    <span className={`relative block shrink-0 overflow-hidden ${box} ${className}`}>
-      <img
-        src={logo}
-        alt="FIBI"
-        className={`absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 ${img} ${
-          tone === 'light' ? 'invert brightness-[1.9]' : ''
-        }`}
-      />
-    </span>
+    <svg
+      viewBox={VIEWBOX[variant]}
+      className={`w-auto shrink-0 ${SIZES[size]} ${TONES[tone]} ${className}`}
+      fill="currentColor"
+      role="img"
+      aria-label="FIBI"
+      preserveAspectRatio="xMidYMid meet"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {/* The artwork's own coordinate system: y-up, tenth-unit precision. */}
+      <g transform="translate(0,853) scale(0.1,-0.1)" stroke="none">
+      <path d="M2880 5389 c0 -12 158 -159 171 -159 8 0 263 0 568 0 393 0 559 4
+575 12 23 12 156 138 156 147 0 3 -331 6 -735 6 -404 0 -735 -3 -735 -6z" />
+      <path d="M5368 5392 l-78 -3 0 -495 0 -495 88 3 87 3 0 494 c0 322 -3 495 -10
+496 -5 0 -45 -1 -87 -3z" />
+      <path d="M6603 5392 l-43 -3 0 -80 0 -79 43 -1 c23 0 310 0 637 0 445 0 604
+-3 630 -12 l35 -12 3 -89 c5 -140 82 -126 -690 -126 l-658 0 0 -295 0 -295
+720 0 c697 0 722 1 759 20 66 33 81 80 81 244 0 153 -7 179 -62 217 -18 12
+-35 24 -37 25 -2 2 10 15 27 29 40 34 55 106 50 239 -4 116 -24 170 -74 198
+-29 17 -80 18 -705 21 -371 1 -693 1 -716 -1z m1316 -608 c17 -21 21 -41 21
+-96 0 -120 68 -108 -610 -108 l-590 0 0 115 0 115 579 0 580 0 20 -26z" />
+      <path d="M9233 5392 l-73 -3 0 -495 0 -495 85 3 85 3 1 494 c0 405 -2 495 -13
+495 -7 1 -46 0 -85 -2z" />
+      <path d="M2880 4695 l0 -295 90 0 90 0 0 205 0 205 526 0 c378 0 531 3 547 12
+24 12 170 145 175 159 2 5 -302 9 -712 9 l-716 0 0 -295z" />
+      <path d="M2880 3615 l0 -195 30 0 30 0 0 80 0 80 75 0 c73 0 75 1 75 25 0 24
+-2 25 -75 25 l-75 0 0 65 0 65 90 0 c89 0 90 0 90 25 l0 25 -120 0 -120 0 0
+-195z" />
+      <path d="M3880 3615 l0 -195 30 0 30 0 0 195 0 195 -30 0 -30 0 0 -195z" />
+      <path d="M6500 3615 l0 -195 106 0 c141 0 184 26 184 109 0 32 -34 81 -56 81
+-20 0 -17 8 13 34 22 19 28 32 27 65 -2 76 -48 101 -184 101 l-90 0 0 -195z
+m177 134 c47 -18 57 -55 23 -89 -16 -16 -33 -20 -80 -20 l-60 0 0 60 0 60 44
+0 c25 0 57 -5 73 -11z m31 -175 c22 -15 29 -57 14 -82 -11 -17 -67 -32 -119
+-32 l-43 0 0 65 0 65 63 0 c40 0 70 -5 85 -16z" />
+      <path d="M7322 3618 l3 -193 28 -3 27 -3 0 195 0 196 -30 0 -30 0 2 -192z" />
+      <path d="M5317 3774 c-4 -4 -7 -22 -7 -40 0 -27 -5 -35 -25 -40 -16 -4 -25
+-13 -25 -25 0 -14 7 -19 25 -19 25 0 25 -1 25 -91 0 -50 5 -99 11 -110 23 -43
+129 -50 129 -9 0 16 -7 20 -35 20 -24 0 -37 6 -45 19 -11 22 -13 92 -4 140 6
+27 10 31 40 31 27 0 34 4 34 19 0 16 -8 20 -37 23 -36 3 -37 4 -37 43 -1 32
+-5 41 -21 43 -12 2 -24 0 -28 -4z" />
+      <path d="M8751 3763 c-10 -20 -11 -24 -11 -53 0 -15 -7 -20 -25 -20 -18 0 -25
+-5 -25 -20 0 -15 7 -20 25 -20 25 0 25 -1 25 -85 0 -46 5 -95 11 -109 22 -47
+129 -59 129 -16 0 14 -9 20 -37 22 l-38 3 -3 92 -3 92 38 3 c26 2 39 8 41 20
+2 13 -5 17 -35 20 -37 3 -38 4 -41 46 -3 34 -7 42 -22 42 -11 0 -24 -8 -29
+-17z" />
+      <path d="M3228 3679 c-51 -26 -71 -68 -66 -136 4 -42 11 -60 33 -83 69 -72
+196 -55 240 30 65 126 -79 257 -207 189z m131 -46 c44 -37 43 -126 -1 -158
+-33 -23 -82 -19 -115 9 -23 20 -28 32 -28 71 0 39 5 51 28 71 34 29 85 32 116
+7z" />
+      <path d="M3630 3689 c-14 -5 -31 -17 -37 -26 -12 -15 -13 -15 -13 5 0 32 -50
+32 -51 0 0 -13 -1 -74 -3 -135 l-2 -113 28 0 28 0 0 90 c0 100 13 125 70 137
+23 4 30 11 30 29 0 26 -10 28 -50 13z" />
+      <path d="M4133 3680 c-27 -16 -33 -17 -33 -5 0 10 -10 15 -30 15 l-30 0 0
+-135 0 -135 30 0 30 0 0 95 c0 82 3 98 20 115 23 23 94 28 107 8 4 -7 10 -58
+13 -113 l5 -100 28 -3 27 -3 0 100 c0 56 -5 112 -12 126 -24 53 -98 70 -155
+35z" />
+      <path d="M4745 3681 c-58 -35 -70 -58 -70 -126 0 -57 3 -67 30 -95 50 -52 130
+-61 198 -22 29 17 36 39 14 47 -7 3 -30 -4 -51 -15 -25 -12 -49 -17 -65 -13
+-34 7 -71 42 -71 65 0 16 10 18 105 18 l105 0 0 39 c0 92 -114 152 -195 102z
+m121 -44 c7 -6 15 -22 19 -34 6 -23 5 -23 -74 -23 -84 0 -90 4 -70 41 20 38
+96 48 125 16z" />
+      <path d="M5049 3685 c-14 -7 -31 -26 -37 -40 -19 -42 3 -75 63 -98 75 -29 80
+-32 80 -58 0 -37 -43 -47 -93 -21 -29 15 -43 17 -51 9 -19 -19 -13 -27 35 -48
+34 -15 56 -19 86 -14 46 8 88 43 88 74 0 33 -42 70 -100 89 -47 15 -55 21 -55
+42 0 36 40 48 88 25 59 -28 80 1 25 35 -38 23 -92 25 -129 5z" />
+      <path d="M5569 3680 c-51 -27 -73 -65 -73 -125 0 -64 30 -108 92 -132 81 -30
+170 10 193 88 39 128 -92 232 -212 169z m136 -55 c19 -18 25 -35 25 -70 0 -61
+-32 -95 -89 -95 -72 0 -113 79 -76 150 17 33 27 38 78 39 28 1 45 -6 62 -24z" />
+      <path d="M5958 3684 c-16 -8 -28 -20 -29 -27 0 -7 -4 -2 -9 11 -6 15 -18 22
+-35 22 l-25 0 0 -135 0 -135 30 0 30 0 0 90 c0 83 2 93 25 115 13 14 36 25 50
+25 20 0 25 5 25 25 0 29 -20 32 -62 9z" />
+      <path d="M6115 3688 c-30 -16 -45 -39 -45 -70 0 -38 29 -64 94 -83 63 -18 78
+-41 46 -67 -28 -23 -37 -22 -85 2 -34 17 -41 18 -53 6 -20 -19 -9 -32 43 -51
+96 -37 189 21 159 100 -7 19 -65 50 -111 59 -40 9 -54 43 -27 63 23 17 42 16
+78 -2 32 -17 56 -14 56 8 0 34 -111 59 -155 35z" />
+      <path d="M7066 3678 c-7 -13 -28 -60 -46 -106 -18 -46 -36 -79 -40 -75 -4 4
+-24 50 -45 101 -35 86 -40 92 -66 92 -16 0 -29 -2 -29 -4 0 -2 22 -54 50 -114
+61 -137 65 -153 47 -188 -8 -16 -18 -39 -22 -52 -6 -21 -4 -23 20 -20 24 3 33
+17 89 148 35 80 70 159 79 177 10 18 17 39 17 48 0 23 -38 18 -54 -7z" />
+      <path d="M7573 3680 c-30 -18 -37 -18 -34 3 0 4 -12 7 -29 7 l-30 0 0 -135 0
+-135 30 0 30 0 0 95 c0 113 13 135 80 135 53 0 60 -16 60 -134 l0 -96 30 0 30
+0 0 94 c0 117 -12 154 -56 172 -45 19 -73 18 -111 -6z" />
+      <path d="M8181 3683 c-51 -26 -73 -67 -69 -133 3 -35 11 -66 23 -83 28 -37 89
+-60 142 -52 40 6 93 37 93 55 0 17 -34 20 -57 5 -28 -19 -81 -22 -110 -7 -11
+6 -26 25 -31 42 l-11 30 105 0 c120 0 127 5 103 74 -26 76 -111 107 -188 69z
+m113 -44 c14 -11 26 -29 26 -40 0 -17 -8 -19 -75 -19 -66 0 -75 2 -75 18 0 19
+24 45 50 55 29 10 47 7 74 -14z" />
+      <path d="M8500 3693 c-30 -11 -60 -47 -60 -73 0 -36 35 -67 98 -85 57 -17 66
+-26 57 -54 -10 -31 -59 -36 -102 -11 -33 19 -38 20 -52 6 -14 -14 -13 -17 4
+-31 78 -59 205 -29 205 50 0 39 -29 64 -96 83 -47 14 -67 32 -58 55 9 24 51
+29 89 11 58 -27 77 3 23 36 -32 19 -76 24 -108 13z" />
+      <path d="M9010 3684 c-51 -21 -80 -69 -80 -132 0 -43 5 -57 30 -86 38 -42 86
+-60 141 -51 140 24 163 215 32 271 -41 18 -78 17 -123 -2z m123 -54 c33 -26
+43 -80 22 -119 -36 -70 -124 -70 -161 1 -46 89 60 180 139 118z" />
+      <path d="M9395 3688 c-11 -6 -26 -18 -32 -26 -11 -14 -13 -13 -13 6 0 18 -6
+22 -30 22 l-30 0 0 -135 0 -135 29 0 29 0 4 96 c3 104 11 119 71 131 20 4 27
+11 27 29 0 26 -21 31 -55 12z" />
+      <path d="M9551 3689 c-57 -23 -68 -83 -22 -122 16 -13 49 -29 74 -35 64 -17
+74 -52 20 -73 -20 -7 -35 -5 -67 11 -36 17 -42 18 -55 5 -13 -13 -13 -17 4
+-30 35 -26 95 -38 135 -26 50 15 72 41 68 83 -3 34 -8 38 -113 85 -48 21 -54
+53 -14 67 19 6 36 4 63 -9 26 -13 40 -15 48 -7 15 15 1 32 -38 48 -38 16 -69
+17 -103 3z" />
+      <path d="M4408 3555 c55 -134 57 -136 86 -133 27 3 32 11 82 128 30 69 54 129
+54 133 0 5 -12 7 -26 5 -23 -3 -31 -15 -65 -98 -22 -52 -40 -99 -42 -104 -1
+-4 -21 38 -44 95 -38 98 -42 104 -71 107 l-30 3 56 -136z" />
+      <path d="M7809 3643 c93 -229 87 -218 120 -218 31 0 33 3 86 127 30 71 55 131
+55 134 0 3 -12 4 -27 2 -25 -3 -32 -13 -67 -100 -21 -54 -41 -98 -45 -98 -3 0
+-23 45 -44 100 -36 95 -40 100 -68 100 l-29 0 19 -47z" />
+      </g>
+    </svg>
   );
 }

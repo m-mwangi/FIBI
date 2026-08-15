@@ -42,8 +42,3 @@
 .inv-num {
   font-variant-numeric: tabular-nums;
 }
-
-/* The wordmark ships as dark artwork; the bar needs it light. */
-.inv-logo-invert {
-  filter: invert(1) brightness(1.9);
-}

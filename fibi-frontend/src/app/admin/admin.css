@@ -134,8 +134,3 @@
     animation: none;
   }
 }
-
-/* The logo asset is solid #000000, which would vanish on the dark rail. */
-.adm-logo-invert {
-  filter: brightness(0) invert(1);
-}
