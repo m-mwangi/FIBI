@@ -90,14 +90,14 @@ export default function MemberHub() {
           <MembershipStatusCard membership={membership} stage={stage} compact />
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="fx-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {FEATURE_CARDS.map((card) => {
             const unlocked = canAccessFeature(card.featureKey);
             const needed = minTierForFeature(card.featureKey);
             return (
               <Card
                 key={card.featureKey}
-                className={unlocked ? "" : "border-dashed bg-slate-50/70"}
+                className={unlocked ? "fx-lift" : "border-dashed bg-slate-50/70"}
               >
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-base">

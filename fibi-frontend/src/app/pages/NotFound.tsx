@@ -1,13 +1,13 @@
 import { Link } from 'react-router';
 import { Home, FolderOpen, SearchX } from 'lucide-react';
 import { Button } from '../components/ui/button';
-import logo from '../../assets/fibi_logo.svg';
+import { Wordmark } from '../components/Wordmark';
 
 export default function NotFound() {
   return (
     <div className="min-h-[80vh] flex flex-col items-center justify-center px-4 py-16 bg-gradient-to-b from-slate-50 via-white to-emerald-50/40">
       <Link to="/" className="mb-10 opacity-90 hover:opacity-100 transition-opacity">
-        <img src={logo} alt="FIBI" className="h-10 w-auto" />
+        <Wordmark size="lg" />
       </Link>
 
       <div className="w-full max-w-md text-center">

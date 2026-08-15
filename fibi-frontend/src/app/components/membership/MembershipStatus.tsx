@@ -176,27 +176,34 @@ export function MembershipStatusCard({
 
   return (
     <div className={`rounded-2xl border ${style.ring} ${compact ? "p-4" : "p-5 sm:p-6"}`}>
-      <div className="flex flex-wrap items-start gap-4">
-        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${style.iconWrap}`}>
-          <Icon className="h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${style.chip}`}>
-              {copy.label}
-            </span>
-            {detail && <span className="text-xs text-slate-500">{detail}</span>}
+      {/* Stacked until `sm`. Side by side, the non-shrinking action button and
+          the 44px icon left the copy about 40px of a 320px screen, which wrapped
+          the status to one word per line and ran the button over it. */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+        <div className="flex min-w-0 flex-1 items-start gap-4">
+          <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${style.iconWrap}`}>
+            <Icon className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${style.chip}`}>
+                {copy.label}
+              </span>
+              {detail && <span className="text-xs text-slate-500">{detail}</span>}
+            </div>
+            <p className={`mt-2 text-slate-700 ${compact ? "text-sm" : ""}`}>{copy.blurb}</p>
+            {feedback && stage === "rejected" && (
+              <blockquote className="mt-3 rounded-lg border-l-2 border-rose-300 bg-white/70 px-3 py-2 text-sm text-slate-600">
+                {feedback}
+              </blockquote>
+            )}
           </div>
-          <p className={`mt-2 text-slate-700 ${compact ? "text-sm" : ""}`}>{copy.blurb}</p>
-          {feedback && stage === "rejected" && (
-            <blockquote className="mt-3 rounded-lg border-l-2 border-rose-300 bg-white/70 px-3 py-2 text-sm text-slate-600">
-              {feedback}
-            </blockquote>
-          )}
         </div>
         {action && (
-          <Link to={action.to} className="shrink-0">
-            <Button className="bg-emerald-600 hover:bg-emerald-700">{action.label}</Button>
+          <Link to={action.to} className="shrink-0 max-sm:w-full">
+            <Button className="h-11 w-full bg-emerald-600 hover:bg-emerald-700 sm:h-9 sm:w-auto">
+              {action.label}
+            </Button>
           </Link>
         )}
       </div>

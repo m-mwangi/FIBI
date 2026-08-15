@@ -99,7 +99,7 @@ export default function Projects() {
           }`}
         />
         <div className="absolute inset-0 bg-black/40" />
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center px-4 text-center">
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center px-4 text-center sm:px-20">
           <p className="text-emerald-200/90 text-xs font-semibold uppercase tracking-[0.2em] mb-2">
             Investor marketplace
           </p>
@@ -114,11 +114,13 @@ export default function Projects() {
             {projects.length} listings
           </p>
         </div>
+        {/* Hidden on phones: at 320px the two arrows sat on top of the hero
+            sentence. The dots below stay, so the slider is still steppable. */}
         <button
           type="button"
           aria-label="Previous"
           onClick={() => withFade(() => setSlide((p) => (p === 0 ? SLIDER.length - 1 : p - 1)))}
-          className="absolute left-3 top-1/2 -translate-y-1/2 z-20 rounded-full bg-black/40 p-2.5 text-white backdrop-blur-sm hover:bg-black/55 border border-white/10"
+          className="absolute left-3 top-1/2 z-20 hidden -translate-y-1/2 rounded-full border border-white/10 bg-black/40 p-2.5 text-white backdrop-blur-sm transition-colors hover:bg-black/55 sm:block"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
@@ -126,7 +128,7 @@ export default function Projects() {
           type="button"
           aria-label="Next"
           onClick={() => withFade(() => setSlide((p) => (p + 1) % SLIDER.length))}
-          className="absolute right-3 top-1/2 -translate-y-1/2 z-20 rounded-full bg-black/40 p-2.5 text-white backdrop-blur-sm hover:bg-black/55 border border-white/10"
+          className="absolute right-3 top-1/2 z-20 hidden -translate-y-1/2 rounded-full border border-white/10 bg-black/40 p-2.5 text-white backdrop-blur-sm transition-colors hover:bg-black/55 sm:block"
         >
           <ChevronRight className="h-5 w-5" />
         </button>
@@ -177,7 +179,7 @@ export default function Projects() {
             return (
               <Card
                 key={project.id}
-                className="group overflow-hidden rounded-2xl border-0 shadow-lg shadow-slate-200/50 ring-1 ring-slate-100 transition-all hover:ring-emerald-200/60 hover:shadow-xl"
+                className="group fx-lift overflow-hidden rounded-2xl border-0 shadow-lg shadow-slate-200/50 ring-1 ring-slate-100 transition-all hover:ring-emerald-200/60 hover:shadow-xl"
               >
                 <div className="relative aspect-[16/10] overflow-hidden bg-slate-100">
                   <img

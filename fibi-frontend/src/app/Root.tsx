@@ -1,20 +1,57 @@
 import { Outlet, useLocation } from 'react-router';
 import { Navigation } from './components/Navigation';
 import { Footer } from './components/Footer';
+import { InvestorShell } from './components/investor/InvestorShell';
+import { useAuth } from './context/AuthContext';
+
+/**
+ * Chooses the chrome for a page: marketing navigation, or the investor portal
+ * shell.
+ *
+ * The split is by *audience*, not by route. A signed-in member on the projects
+ * list is inside the product and gets the portal bar; a visitor on the same
+ * page is being sold to and gets the marketing nav.
+ */
+
+/** Member surfaces. Everything else keeps the marketing chrome. */
+const PORTAL_PATHS = new Set([
+  '/dashboard',
+  '/member-hub',
+  '/membership',
+  '/membership/apply',
+  '/membership/billing',
+  '/projects',
+]);
 
 export default function Root() {
   const location = useLocation();
+  const { user, isAuthenticated, authReady } = useAuth();
 
   // Auth pages carry their own full-height split-screen chrome, so both the site
   // nav and the footer are suppressed on all of them.
   const AUTH_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password'];
   const isAuthPage = AUTH_PATHS.includes(location.pathname);
 
+  const showPortal =
+    authReady &&
+    isAuthenticated &&
+    user?.role === 'investor' &&
+    PORTAL_PATHS.has(location.pathname);
+
+  if (showPortal) {
+    return (
+      <InvestorShell>
+        <Outlet />
+      </InvestorShell>
+    );
+  }
+
   const hideNavigation =
     isAuthPage ||
     (location.pathname.startsWith('/projects/') &&
       location.pathname !== '/projects') ||
     location.pathname.startsWith('/admin') ||
+    // Only reachable by an admin — an investor here is inside the portal above.
     location.pathname === '/dashboard';
 
   // The admin console is an operator surface with its own full-height chrome —

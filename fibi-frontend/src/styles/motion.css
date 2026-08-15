@@ -1,0 +1,115 @@
+/*
+ * Motion vocabulary.
+ *
+ * Four things move on this site and nothing else: a page arriving, a panel
+ * sliding in, a group of cards settling in sequence, and a card lifting under
+ * the pointer. Keeping the list short is what stops a financial product from
+ * feeling like a toy — and keeping it in one file means a duration is chosen
+ * once rather than re-typed as an arbitrary number in thirty components.
+ *
+ * Every animation is behind `prefers-reduced-motion: no-preference`, and the
+ * reduce branch at the bottom neutralises anything a component animates
+ * inline. Vestibular disorders are not an edge case, and a member with motion
+ * sickness still has to be able to read their portfolio.
+ */
+
+:root {
+  /* Decelerating ease. Things enter quickly and settle — never bounce. */
+  --fx-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --fx-fast: 180ms;
+  --fx-base: 320ms;
+  --fx-slow: 480ms;
+}
+
+@keyframes fx-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fx-fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes fx-slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+
+@keyframes fx-slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: none; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* A page arriving. Applied to the routed content and keyed on the path, so
+     each navigation reads as a new page rather than a repaint. */
+  .fx-page {
+    animation: fx-fade-up var(--fx-base) var(--fx-ease) both;
+  }
+
+  .fx-fade-in {
+    animation: fx-fade-in var(--fx-fast) ease-out both;
+  }
+
+  .fx-fade-up {
+    animation: fx-fade-up var(--fx-base) var(--fx-ease) both;
+  }
+
+  /* Navigation drawers. The panel slides from the edge it is anchored to while
+     the scrim fades — the two must not both slide, or the overlay reads as one
+     sheet of paper sliding over another. */
+  .fx-drawer-left {
+    animation: fx-slide-in-left var(--fx-base) var(--fx-ease) both;
+  }
+
+  .fx-drawer-right {
+    animation: fx-slide-in-right var(--fx-base) var(--fx-ease) both;
+  }
+
+  /*
+   * A group settling in sequence. Capped at eight children: past that the last
+   * card waits most of a second, which reads as the page being slow rather
+   * than as choreography.
+   */
+  .fx-stagger > * {
+    animation: fx-fade-up var(--fx-slow) var(--fx-ease) both;
+  }
+  .fx-stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .fx-stagger > *:nth-child(2) { animation-delay: 60ms; }
+  .fx-stagger > *:nth-child(3) { animation-delay: 120ms; }
+  .fx-stagger > *:nth-child(4) { animation-delay: 180ms; }
+  .fx-stagger > *:nth-child(5) { animation-delay: 240ms; }
+  .fx-stagger > *:nth-child(6) { animation-delay: 300ms; }
+  .fx-stagger > *:nth-child(7) { animation-delay: 360ms; }
+  .fx-stagger > *:nth-child(n + 8) { animation-delay: 420ms; }
+
+  /* A card under the pointer. Hover only — `@media (hover: hover)` keeps a
+     touch device from leaving a card stuck in its lifted state after a tap. */
+  @media (hover: hover) {
+    .fx-lift {
+      transition: transform var(--fx-fast) var(--fx-ease),
+        box-shadow var(--fx-fast) var(--fx-ease);
+    }
+    .fx-lift:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 24px -12px rgb(15 23 42 / 0.18);
+    }
+  }
+}
+
+/*
+ * Reduced motion: content still appears, it just stops moving. Opacity-only
+ * fades are kept at a hair's length so nothing flashes, and every transform is
+ * dropped rather than shortened.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

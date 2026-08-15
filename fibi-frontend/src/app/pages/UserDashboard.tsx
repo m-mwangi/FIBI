@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import {
   TrendingUp,
   TrendingDown,
@@ -8,11 +8,7 @@ import {
   ArrowUpRight,
   Eye,
   LogOut,
-  Home,
-  FolderOpen,
-  LayoutDashboard,
   Sparkles,
-  Menu,
   Calendar,
   Wallet,
   PieChart as PieChartIcon,
@@ -27,13 +23,6 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Separator } from '../components/ui/separator';
 import { Progress } from '../components/ui/progress';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '../components/ui/sheet';
 import {
   Dialog,
   DialogContent,
@@ -54,7 +43,6 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import logo from '../../assets/fibi_logo.svg';
 import { getJson, postJson, putJson } from '@/lib/api';
 import { normalizeApiProject, resolveMediaUrl, type ProjectListResponse } from '@/lib/projects';
 import {
@@ -143,6 +131,7 @@ export default function UserDashboard() {
   const { user, logout, refreshUser } = useAuth();
   const { membership, stage: membershipStage, refreshMembership } = useMembership();
   const navigate = useNavigate();
+  const location = useLocation();
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawBusy, setWithdrawBusy] = useState(false);
@@ -169,7 +158,6 @@ export default function UserDashboard() {
   const [pwBusy, setPwBusy] = useState(false);
   const [pwError, setPwError] = useState('');
   const [pwSuccess, setPwSuccess] = useState('');
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [investments, setInvestments] = useState<ApiInvestment[]>([]);
   const [isLoadingInvestments, setIsLoadingInvestments] = useState(true);
   const [investmentsError, setInvestmentsError] = useState('');
@@ -181,6 +169,15 @@ export default function UserDashboard() {
   const handleLogout = () => {
     void logout().then(() => navigate('/', { replace: true }));
   };
+
+  // `/dashboard#settings` opens the account dialog. The portal's account menu
+  // links here rather than carrying a second copy of this form, and the hash is
+  // cleared on open so closing and reopening the page does not spring it again.
+  useEffect(() => {
+    if (location.hash !== '#settings') return;
+    setSettingsOpen(true);
+    navigate(`${location.pathname}${location.search}`, { replace: true });
+  }, [location.hash, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -493,31 +490,6 @@ export default function UserDashboard() {
     },
   ];
 
-  const NavLinks = ({ onNavigate }: { onNavigate?: () => void }) => (
-    <>
-      <Link
-        to="/"
-        onClick={onNavigate}
-        className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 transition-colors"
-      >
-        <Home className="h-4 w-4 shrink-0" />
-        Home
-      </Link>
-      <Link
-        to="/projects"
-        onClick={onNavigate}
-        className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 transition-colors"
-      >
-        <FolderOpen className="h-4 w-4 shrink-0" />
-        Projects
-      </Link>
-      <span className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-100 text-emerald-900 font-medium">
-        <LayoutDashboard className="h-4 w-4 shrink-0" />
-        Portfolio
-      </span>
-    </>
-  );
-
   const supportFooter = (
     <p className="text-center text-xs text-slate-400 mt-10 max-w-2xl mx-auto px-4">
       Need help?{' '}
@@ -528,7 +500,7 @@ export default function UserDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-emerald-50/40">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-emerald-50/40 pt-16">
       <Dialog
         open={withdrawOpen}
         onOpenChange={(open) => {
@@ -848,100 +820,9 @@ export default function UserDashboard() {
         </DialogContent>
       </Dialog>
 
-      <header
-        role="banner"
-        className="sticky top-0 z-30 border-b border-emerald-100/80 bg-white/90 backdrop-blur-md shadow-sm shadow-emerald-900/5"
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 sm:gap-6 min-w-0">
-            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="sm:hidden shrink-0 text-slate-700"
-                  aria-label="Open menu"
-                >
-                  <Menu className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="w-[min(100%,320px)] p-0">
-                <SheetHeader className="p-4 border-b text-left">
-                  <SheetTitle className="flex items-center gap-2">
-                    <img src={logo} alt="" className="h-8 w-auto" />
-                    Menu
-                  </SheetTitle>
-                </SheetHeader>
-                <nav className="flex flex-col p-3 gap-1" aria-label="Mobile">
-                  <NavLinks onNavigate={() => setMobileOpen(false)} />
-                </nav>
-                <div className="p-4 mt-auto border-t space-y-2">
-                  <p className="text-xs text-slate-500 truncate">{user?.email}</p>
-                  <Button
-                    variant="outline"
-                    className="w-full border-red-200 text-red-700"
-                    onClick={() => {
-                      setMobileOpen(false);
-                      void handleLogout();
-                    }}
-                  >
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Log out
-                  </Button>
-                </div>
-              </SheetContent>
-            </Sheet>
-
-            <Link to="/" className="shrink-0 flex items-center">
-              <img src={logo} alt="FIBI" className="h-8 sm:h-9 w-auto" />
-            </Link>
-            <nav
-              className="hidden sm:flex items-center gap-1 text-sm font-medium text-slate-600"
-              aria-label="Primary"
-            >
-              <Link
-                to="/"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-emerald-50 hover:text-emerald-800 transition-colors"
-              >
-                <Home className="h-4 w-4" />
-                Home
-              </Link>
-              <Link
-                to="/projects"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-emerald-50 hover:text-emerald-800 transition-colors"
-              >
-                <FolderOpen className="h-4 w-4" />
-                Projects
-              </Link>
-              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-100/80 text-emerald-800">
-                <LayoutDashboard className="h-4 w-4" />
-                Portfolio
-              </span>
-            </nav>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <div className="hidden md:flex flex-col items-end text-right min-w-0">
-              <span className="text-sm font-medium text-slate-900 truncate max-w-[200px]">
-                {user?.name}
-              </span>
-              <span className="text-xs text-slate-500 truncate max-w-[200px]">{user?.email}</span>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleLogout}
-              className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 hover:border-red-300"
-            >
-              <LogOut className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Log out</span>
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <main id="main-content">
+      {/* The portal shell owns the header and the <main> landmark; this page
+          starts at its own hero, cleared of the fixed 64px bar. */}
+      <div>
         <div className="relative overflow-hidden border-b border-emerald-100/60 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white">
           <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'0.06\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-80" />
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-12">
@@ -1105,11 +986,11 @@ export default function UserDashboard() {
             </>
           ) : (
             <>
-              <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5 mb-8 sm:mb-10">
+              <div className="fx-stagger grid sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5 mb-8 sm:mb-10">
                 {statCards.map((card) => (
                   <Card
                     key={card.title}
-                    className="border-0 shadow-md shadow-slate-200/60 rounded-2xl bg-white overflow-hidden ring-1 ring-slate-100/80 hover:ring-emerald-200/60 transition-all duration-200"
+                    className="fx-lift border-0 shadow-md shadow-slate-200/60 rounded-2xl bg-white overflow-hidden ring-1 ring-slate-100/80 hover:ring-emerald-200/60 transition-all duration-200"
                   >
                     <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 pt-5 px-5">
                       <CardTitle className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -1684,7 +1565,7 @@ export default function UserDashboard() {
             </>
           )}
         </div>
-      </main>
+      </div>
     </div>
   );
 }

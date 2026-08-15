@@ -1,0 +1,49 @@
+/*
+ * Investor portal design tokens.
+ *
+ * Imported from InvestorShell.tsx rather than the global stylesheet so it ships
+ * with the portal chunk and cannot leak into the marketing pages. Plain CSS on
+ * purpose — no Tailwind directives here, so `@apply` is unavailable.
+ *
+ * The portal is a deep forest bar over a light workspace. The hue is
+ * deliberately NOT the admin console's navy (--adm-rail: #0b1220): an operator
+ * surface and a member surface must be distinguishable at a glance, and the
+ * member one carries the brand's green.
+ */
+
+.inv-shell {
+  /* Navigation bar */
+  --inv-bar: #062017;
+  --inv-bar-2: #0b3527;
+  --inv-bar-line: rgba(255, 255, 255, 0.1);
+  /* Idle nav text. Light enough to read on the bar, dim enough that the active
+     pill is unmistakable. */
+  --inv-bar-ink: #9cc3b2;
+  --inv-bar-ink-hi: #ecfdf5;
+
+  --inv-brand: #10b981;
+  --inv-brand-deep: #059669;
+
+  /* Workspace */
+  --inv-canvas: #f7f9f8;
+  --inv-line: #e3e9e6;
+}
+
+/* One focus treatment for every control in the portal, on the bar and on the
+   page alike — the default ring disappears against the dark bar. */
+.inv-focus:focus-visible {
+  outline: 2px solid var(--inv-brand);
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+
+/* Money and countdowns. Proportional digits make a renewal counter jitter as
+   it ticks down. */
+.inv-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The wordmark ships as dark artwork; the bar needs it light. */
+.inv-logo-invert {
+  filter: invert(1) brightness(1.9);
+}

@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ArrowLeft, Leaf, ShieldCheck, TrendingUp, Users } from 'lucide-react';
-import logo from '../../../assets/fibi_logo.svg';
+import { Wordmark } from '../Wordmark';
 
 const PANEL_IMAGES = ['/images/capsule12.jpeg', '/images/solar2.jpg', '/images/avo3.jpg'];
 
@@ -63,7 +63,7 @@ export function AuthLayout({
 
         <div className="relative z-10">
           <Link to="/" className="inline-block">
-            <img src={logo} alt="FIBI" className="h-auto w-44 brightness-0 invert" />
+            <Wordmark size="xl" tone="light" />
           </Link>
         </div>
 
@@ -125,7 +125,7 @@ export function AuthLayout({
           <div className="absolute inset-0 bg-gradient-to-r from-emerald-950 via-emerald-950/85 to-emerald-900/70" />
           <div className="relative flex items-center justify-between">
             <Link to="/">
-              <img src={logo} alt="FIBI" className="h-auto w-28 brightness-0 invert" />
+              <Wordmark size="md" tone="light" />
             </Link>
             <Link
               to="/"

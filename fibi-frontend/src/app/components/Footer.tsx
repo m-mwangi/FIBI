@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import logo from '../../assets/fibi_logo.svg';
+import { Wordmark } from './Wordmark';
 
 export function Footer() {
   return (
@@ -10,11 +10,7 @@ export function Footer() {
           {/* Brand */}
           <div>
             <div className="flex items-center mb-4">
-              <img
-                src={logo}
-                alt="FIBI"
-                className="h-35 w-auto invert"
-              />
+              <Wordmark size="lg" tone="light" />
             </div>
 
             <p className="text-sm text-gray-400">
