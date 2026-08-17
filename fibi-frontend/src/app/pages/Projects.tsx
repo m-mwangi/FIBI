@@ -8,6 +8,12 @@ import { Card, CardContent, CardHeader } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Progress } from '../components/ui/progress';
+import { Seo } from '../seo/Seo';
+import { baseGraph, breadcrumbSchema, webPageSchema } from '../seo/schema';
+
+const SEO_TITLE = 'Land investment projects in Kenya';
+const SEO_DESCRIPTION =
+  'Browse open FIBI projects — eco-lodge, solar and agricultural developments in Kenya, each with its funding target, minimum contribution, projected return and deadline.';
 
 const SLIDER = [
   '/images/hero5.jpeg',
@@ -90,6 +96,32 @@ export default function Projects() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-emerald-50/35">
+      {/*
+        The prerendered copy of this page is the empty-state shell: the listing
+        itself loads from the API in an effect, which never runs at build time.
+        That is deliberate — a snapshot of open projects would go stale between
+        deploys. Crawlers get a correct, indexable page describing the listing,
+        and reach individual projects through the sitemap, which is generated
+        from live API data on every build.
+      */}
+      <Seo
+        title={SEO_TITLE}
+        description={SEO_DESCRIPTION}
+        path="/projects"
+        jsonLd={[
+          baseGraph(
+            webPageSchema({
+              name: SEO_TITLE,
+              description: SEO_DESCRIPTION,
+              path: '/projects',
+            }),
+            breadcrumbSchema([
+              { name: 'Home', path: '/' },
+              { name: 'Projects', path: '/projects' },
+            ]),
+          ),
+        ]}
+      />
       <div className="relative h-[min(400px,52vh)] min-h-[280px]">
         <img
           src={SLIDER[slide]}

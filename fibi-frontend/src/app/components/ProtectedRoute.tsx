@@ -2,6 +2,7 @@ import { Navigate, useLocation } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { useMembership } from "../context/MembershipContext";
 import type { MembershipTier } from "@/lib/membership";
+import { NoIndexSeo } from "../seo/Seo";
 
 type Role = "investor" | "admin";
 
@@ -51,5 +52,21 @@ export function ProtectedRoute({
     }
   }
 
-  return <>{children}</>;
+  /**
+   * Every authenticated surface is marked `noindex` from one place rather than
+   * page by page, so a new protected route cannot be added without it.
+   *
+   * This is belt-and-braces alongside the `Disallow` rules in robots.txt, and
+   * the two do different jobs: robots.txt stops crawling, `noindex` removes a
+   * URL that is already indexed. A disallowed URL can never be recrawled, so
+   * it can never be told to deindex — which is why both are needed.
+   *
+   * Rendered before `children` so a page that declares its own `<Seo>` wins.
+   */
+  return (
+    <>
+      <NoIndexSeo title="FIBI account" path={location.pathname} />
+      {children}
+    </>
+  );
 }

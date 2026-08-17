@@ -2,10 +2,18 @@ import { Link } from 'react-router';
 import { Home, FolderOpen, SearchX } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Wordmark } from '../components/Wordmark';
+import { NoIndexSeo } from '../seo/Seo';
 
 export default function NotFound() {
   return (
     <div className="min-h-[80vh] flex flex-col items-center justify-center px-4 py-16 bg-gradient-to-b from-slate-50 via-white to-emerald-50/40">
+      {/*
+        The SPA fallback serves this page with a 200 status, so `noindex` is
+        the only signal that keeps unknown URLs out of the index. The nginx
+        config now also returns a real 404 for paths that are not app routes —
+        see the note there.
+      */}
+      <NoIndexSeo title="Page not found" path="/404" />
       <Link to="/" className="mb-10 opacity-90 hover:opacity-100 transition-opacity">
         <Wordmark size="lg" />
       </Link>

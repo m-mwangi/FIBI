@@ -3,6 +3,7 @@ import { Navigation } from './components/Navigation';
 import { Footer } from './components/Footer';
 import { InvestorShell } from './components/investor/InvestorShell';
 import { useAuth } from './context/AuthContext';
+import { NoIndexSeo } from './seo/Seo';
 
 /**
  * Chooses the chrome for a page: marketing navigation, or the investor portal
@@ -60,6 +61,14 @@ export default function Root() {
 
   return (
     <div className="flex flex-col min-h-screen">
+      {/*
+        Sign-in and password-recovery screens are marked `noindex` here rather
+        than in each of the four pages, for the same reason ProtectedRoute owns
+        it for authenticated routes: a new auth screen should inherit the rule
+        instead of having to remember it. Declared before `<Outlet />` so any
+        page-level `<Seo>` still takes precedence.
+      */}
+      {isAuthPage && <NoIndexSeo title="Sign in" path={location.pathname} />}
       {!hideNavigation && <Navigation />}
       <main className="flex-1">
         <Outlet />

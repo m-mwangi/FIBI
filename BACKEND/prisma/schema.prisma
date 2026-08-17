@@ -805,3 +805,31 @@ model MemberEventRegistration {
   @@unique([eventId, userId])
   @@index([userId])
 }
+//////////////////////////////////////////////////////
+// OUTBOUND INTEGRATION CREDENTIALS
+//////////////////////////////////////////////////////
+
+// Long-lived provider refresh tokens for server-to-server integrations, one row
+// per provider ("zoho"). These are not user sessions: there is a single FIBI
+// mailbox, authorized once by an admin, and the server mints its own hourly
+// access tokens from the stored refresh token.
+//
+// The refresh token is stored as issued because it must be replayable against
+// the provider — unlike PasswordResetToken above, a one-way hash would make it
+// useless. It is therefore a live credential at rest: restrict database access
+// accordingly, and prefer ZOHO_REFRESH_TOKEN in the environment where the
+// deployment can inject secrets directly.
+model OAuthCredential {
+  id               String   @id @default(uuid())
+  provider         String   @unique
+  refreshToken     String
+  scope            String?
+  // The mailbox/account the token belongs to, for display in the admin console.
+  accountEmail     String?
+  // Who ran the connect flow, captured at the time so the record survives their
+  // account being deleted.
+  connectedById    String?
+  connectedByEmail String?
+  connectedAt      DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

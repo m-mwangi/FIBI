@@ -7,6 +7,8 @@ import { featureLabel, tierLabel } from "@/lib/membership";
 import { PlanGrid } from "../components/membership/PlanGrid";
 import { MembershipStatusCard } from "../components/membership/MembershipStatus";
 import { Button } from "../components/ui/button";
+import { Seo } from "../seo/Seo";
+import { baseGraph, breadcrumbSchema, webPageSchema } from "../seo/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import {
@@ -89,6 +91,25 @@ export default function MembershipLanding() {
 
   return (
     <div className="min-h-screen bg-white">
+      <Seo
+        title="FIBI membership"
+        description="FIBI membership tiers and what each one unlocks — project access, platform features and member events. Membership is separate from any individual investment."
+        path="/membership"
+        jsonLd={[
+          baseGraph(
+            webPageSchema({
+              name: "FIBI membership",
+              description:
+                "Membership tiers, entitlements and how to apply for FIBI membership.",
+              path: "/membership",
+            }),
+            breadcrumbSchema([
+              { name: "Home", path: "/" },
+              { name: "Membership", path: "/membership" },
+            ]),
+          ),
+        ]}
+      />
       <section className="relative flex min-h-[78vh] items-center overflow-hidden pt-20">
         <div className="absolute inset-0">
           {HERO_IMAGES.map((image, index) => (
