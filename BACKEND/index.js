@@ -25,6 +25,7 @@ const membershipRoutes = require('./routes/membership.routes');
 const zohoRoutes = require('./routes/zoho.routes');
 const { bootstrapMembership, expireDueMemberships } = require('./services/membership.service');
 const adminRoutes = require('./routes/admin.routes');
+const sitemapRoutes = require('./routes/sitemap.routes');
 
 const app = express();
 
@@ -173,6 +174,10 @@ app.use('/api/v1/stripe', stripeRoutes);
 app.use('/api/v1/membership', membershipRoutes);
 app.use('/api/v1/zoho', zohoRoutes);
 app.use('/api/v1/admin', adminRoutes);
+
+// Root-mounted, not under /api/v1: a sitemap may only list URLs at or below
+// its own path, so this has to answer on /sitemap-projects.xml.
+app.use('/', sitemapRoutes);
 
 // Error Handler Middleware
 app.use(errorHandler);

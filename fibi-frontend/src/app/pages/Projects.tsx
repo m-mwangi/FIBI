@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { MapPin, TrendingUp, Calendar, ChevronLeft, ChevronRight, Users, Loader2 } from 'lucide-react';
 import type { Project } from '../data/projects';
 import { getJson } from '@/lib/api';
-import { normalizeApiProject, type ProjectListResponse } from '@/lib/projects';
+import { categoryLabel, normalizeApiProject, type ProjectListResponse } from '@/lib/projects';
 import { Card, CardContent, CardHeader } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -74,11 +74,6 @@ export default function Projects() {
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(
       minorUnits / 100
     );
-
-  const categoryLabel = (c: string) =>
-    ({ 'eco-lodge': 'Eco lodge', 'solar-roof': 'Solar', agriculture: 'Agriculture' } as Record<string, string>)[
-      c
-    ] || c;
 
   const statusClass: Record<string, string> = {
     open: 'bg-emerald-500 hover:bg-emerald-600 border-0 text-white',

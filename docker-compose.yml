@@ -95,6 +95,11 @@ services:
         VITE_FACEBOOK_APP_ID: ${VITE_FACEBOOK_APP_ID:-}
         VITE_APPLE_CLIENT_ID: ${VITE_APPLE_CLIENT_ID:-}
         VITE_APPLE_REDIRECT_URI: ${VITE_APPLE_REDIRECT_URI:-}
+        # Public origin the prerenderer fetches projects from at build time.
+        # The build container is not on the `internal` network, so this has to
+        # be the externally reachable URL rather than http://backend:5000.
+        # Unset => project pages are skipped with a warning, build still passes.
+        PRERENDER_API_URL: ${PRERENDER_API_URL:-}
     restart: unless-stopped
     security_opt: *no_new_privs
     depends_on:

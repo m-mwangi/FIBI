@@ -26,11 +26,43 @@ const xmlEscape = (s) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
 
+/** Project detail routes, which the backend owns. */
+const isProjectDetail = (path) => /^\/projects\/[^/]+$/.test(path);
+
+/**
+ * Index tying the two halves together.
+ *
+ * The static half is rebuilt with the frontend; the project half is generated
+ * per request from the database. Splitting them means neither is held back by
+ * the other's cadence, and no URL appears in both.
+ */
+function buildSitemapIndex(siteUrl) {
+  const today = new Date().toISOString().slice(0, 10);
+  const child = (path) =>
+    [
+      '  <sitemap>',
+      `    <loc>${xmlEscape(`${siteUrl}${path}`)}</loc>`,
+      `    <lastmod>${today}</lastmod>`,
+      '  </sitemap>',
+    ].join('\n');
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    child('/sitemap-static.xml'),
+    child('/sitemap-projects.xml'),
+    '</sitemapindex>',
+    '',
+  ].join('\n');
+}
+
 function buildSitemap(siteUrl, routes) {
   const today = new Date().toISOString().slice(0, 10);
 
   const entries = routes
-    .filter((r) => r.indexable)
+    // Project pages are served by the backend's dynamic sitemap. Listing them
+    // here too would duplicate every project and re-stale it on each deploy.
+    .filter((r) => r.indexable && !isProjectDetail(r.path))
     .map((r) => {
       const loc = `${siteUrl}${r.path === '/' ? '/' : r.path.replace(/\/+$/, '')}`;
       const lastmod = r.lastmod || today;
@@ -133,14 +165,34 @@ async function main() {
     join(ssrDir, 'entry-server.js')
   );
 
-  const sitemap = buildSitemap(SITE_URL, routes);
-  await writeFile(join(distDir, 'sitemap.xml'), sitemap, 'utf8');
+  await writeFile(
+    join(distDir, 'sitemap-static.xml'),
+    buildSitemap(SITE_URL, routes),
+    'utf8',
+  );
+  await writeFile(
+    join(distDir, 'sitemap.xml'),
+    buildSitemapIndex(SITE_URL),
+    'utf8',
+  );
 
   const robots = buildRobots(SITE_URL, PRIVATE_ROUTE_PREFIXES);
   await writeFile(join(distDir, 'robots.txt'), robots, 'utf8');
 
-  const indexable = routes.filter((r) => r.indexable).length;
-  log(`sitemap.xml — ${indexable} indexable URL(s) of ${routes.length} prerendered`);
+  const staticCount = routes.filter(
+    (r) => r.indexable && !isProjectDetail(r.path),
+  ).length;
+  const projectCount = routes.filter((r) => isProjectDetail(r.path)).length;
+
+  log(`sitemap-static.xml — ${staticCount} URL(s)`);
+  log(
+    `sitemap.xml — index over sitemap-static.xml + sitemap-projects.xml ` +
+      `(the latter served live by the API)`,
+  );
+  log(
+    `prerendered ${projectCount} project page(s); their sitemap entries come ` +
+      `from the database, not from this build`,
+  );
   log(`robots.txt — sitemap at ${SITE_URL}/sitemap.xml`);
 }
 

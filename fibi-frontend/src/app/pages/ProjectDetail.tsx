@@ -26,7 +26,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Separator } from '../components/ui/separator';
 import { getJson, postJson } from '@/lib/api';
-import { normalizeApiProject, type ProjectOneResponse } from '@/lib/projects';
+import { categoryLabel, normalizeApiProject, type ProjectOneResponse } from '@/lib/projects';
 import { useAuth } from '../context/AuthContext';
 import { Seo } from '../seo/Seo';
 import { baseGraph, breadcrumbSchema, webPageSchema } from '../seo/schema';
@@ -187,12 +187,6 @@ export default function ProjectDetail() {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(minorUnits / 100);
-
-  const categoryLabel = (category: string) =>
-    ({ 'eco-lodge': 'Eco lodge', 'solar-roof': 'Solar roof', agriculture: 'Agriculture' } as Record<
-      string,
-      string
-    >)[category] || category;
 
   const statusIcon = (status: 'completed' | 'in-progress' | 'upcoming') => {
     switch (status) {

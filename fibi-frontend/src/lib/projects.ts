@@ -65,6 +65,32 @@ function mapProjectStatus(status: string): Project['status'] {
 }
 
 /** Merge cover + ProjectImage rows into ordered unique gallery URLs (absolute). */
+/**
+ * Display names for project categories.
+ *
+ * Categories are free-form strings set by admins, so this map will always
+ * trail the data. `categoryLabel` humanises anything missing rather than
+ * falling through to the raw value — an unmapped slug used to reach the page
+ * `<title>` verbatim ("bulk-parcel project in Msambweni"), which is what a
+ * searcher would have seen in the results.
+ */
+const CATEGORY_LABELS: Record<string, string> = {
+  'eco-lodge': 'Eco lodge',
+  'solar-roof': 'Solar roof',
+  agriculture: 'Agriculture',
+  'bulk-parcel': 'Bulk parcel',
+  'coastal-beach': 'Coastal beach',
+};
+
+export function categoryLabel(category: string): string {
+  const known = CATEGORY_LABELS[category];
+  if (known) return known;
+
+  const cleaned = category.replace(/[-_]+/g, ' ').trim();
+  if (!cleaned) return category;
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
 export function normalizeApiProject(raw: ApiProject): Project {
   const primaryRaw = raw.imageUrl || '';
   const fromRows = (raw.projectImages ?? []).map((r) => r.imageUrl);

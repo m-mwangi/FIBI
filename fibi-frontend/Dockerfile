@@ -14,7 +14,17 @@ ARG VITE_FACEBOOK_APP_ID=
 ARG VITE_APPLE_CLIENT_ID=
 ARG VITE_APPLE_REDIRECT_URI=
 
+# Where the prerenderer reads the project list, so /projects/<id> ships as real
+# HTML instead of a spinner. Build-time only — it is never baked into the
+# bundle, and the browser still calls the API through VITE_API_URL.
+#
+# Must be reachable from the build container, which is NOT on the compose
+# network: use the public origin (https://fibicommunity.org), not http://backend.
+# Left empty the build still succeeds and warns, skipping project pages.
+ARG PRERENDER_API_URL=
+
 ENV VITE_API_URL=$VITE_API_URL
+ENV PRERENDER_API_URL=$PRERENDER_API_URL
 ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
 ENV VITE_FACEBOOK_APP_ID=$VITE_FACEBOOK_APP_ID
 ENV VITE_APPLE_CLIENT_ID=$VITE_APPLE_CLIENT_ID
