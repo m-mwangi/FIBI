@@ -2,8 +2,10 @@
  * Outbound mail.
  *
  * Three modes, in priority order:
- *   1. Zoho OAuth (ZOHO_CLIENT_ID + ZOHO_MAIL_USER set) — SMTP authenticated
- *      with a rotating XOAUTH2 access token instead of a stored password.
+ *   1. Zoho OAuth (ZOHO_CLIENT_ID + ZOHO_MAIL_USER set) — delivered through the
+ *      Zoho Mail REST API. Not SMTP: Zoho's SMTP servers reject the XOAUTH2
+ *      handshake with "501 Could not do Unknown Authentication", because OAuth
+ *      on Zoho Mail is scoped for the API. SMTP there wants an app password.
  *   2. Plain SMTP password auth, when SMTP_HOST is configured.
  *   3. With neither — the normal state on localhost — it writes the message to
  *      the server log so the reset flow is fully exercisable in development
@@ -19,48 +21,18 @@ const zohoOAuth = require('./zohoOAuth.service');
 
 let cachedTransport;
 
-/** Zoho's SMTP endpoint, unless the deployment points SMTP_HOST somewhere else. */
-const ZOHO_SMTP_HOST = 'smtp.zoho.com';
-const ZOHO_SMTP_PORT = 465;
-
 /**
- * Transport bound to the access token it was built with. Access tokens roll
- * hourly, and nodemailer captures the credential at construction time, so the
- * transport is rebuilt whenever the token underneath it changes.
+ * Zoho requires fromAddress to be an address the account may send as, so the
+ * display-name wrapper in MAIL_FROM ("FIBI <x@y>") is unwrapped to the bare
+ * address. ZOHO_MAIL_USER is the fallback and the authority on who we are.
  */
-let cachedZohoTransport = null;
-
-async function getZohoTransport() {
-    const accessToken = await zohoOAuth.getAccessToken();
-
-    if (cachedZohoTransport && cachedZohoTransport.accessToken === accessToken) {
-        return cachedZohoTransport.transport;
-    }
-
-    const port = config.SMTP_HOST ? config.SMTP_PORT : ZOHO_SMTP_PORT;
-
-    const transport = nodemailer.createTransport({
-        host: config.SMTP_HOST || ZOHO_SMTP_HOST,
-        port,
-        secure: port === 465,
-        auth: {
-            type: 'OAuth2',
-            user: config.ZOHO_MAIL_USER,
-            accessToken,
-        },
-        // On 587 the access token is sent after STARTTLS. Without this,
-        // nodemailer would continue in cleartext against a server that does not
-        // advertise STARTTLS — handing the bearer token to anyone on the path.
-        requireTLS: port !== 465,
-    });
-
-    cachedZohoTransport = { accessToken, transport };
-    return transport;
+function zohoFromAddress() {
+    const match = String(config.MAIL_FROM || '').match(/<([^>]+)>/);
+    const bare = match ? match[1].trim() : String(config.MAIL_FROM || '').trim();
+    return bare.includes('@') ? bare : config.ZOHO_MAIL_USER;
 }
 
 async function getTransport() {
-    if (zohoOAuth.isEnabled()) return getZohoTransport();
-
     if (cachedTransport !== undefined) return cachedTransport;
 
     if (!config.SMTP_HOST) {
@@ -86,6 +58,11 @@ async function getTransport() {
 }
 
 async function sendMail({ to, subject, text, html }) {
+    if (zohoOAuth.isEnabled()) {
+        await zohoOAuth.sendMessage({ from: zohoFromAddress(), to, subject, text, html });
+        return { delivered: true, logged: false };
+    }
+
     const transport = await getTransport();
 
     if (!transport) {

@@ -33,8 +33,15 @@ const EXPIRY_SKEW_MS = 60 * 1000;
 /** In-process access token cache: { token, expiresAt }. */
 let cachedAccess = null;
 
+/** Zoho account id, discovered once per process. Never changes for an account. */
+let cachedAccountId = null;
+
 function accountsBase() {
     return String(config.ZOHO_ACCOUNTS_DOMAIN).replace(/\/+$/, '');
+}
+
+function mailApiBase() {
+    return String(config.ZOHO_MAIL_API_DOMAIN).replace(/\/+$/, '');
 }
 
 /** Client credentials present — says nothing about whether anyone has authorized yet. */
@@ -206,6 +213,85 @@ async function getAccessToken() {
     return cachedAccess.token;
 }
 
+/**
+ * The Zoho account behind the token, including the addresses it is permitted to
+ * send from. `fromAddress` on a send must be one of those — a mailbox that
+ * resolves in DNS but is not provisioned on the account is rejected, which is
+ * the single most common way this integration is misconfigured.
+ */
+async function fetchAccount() {
+    const token = await getAccessToken();
+
+    const { status, data } = await axios.get(`${mailApiBase()}/api/accounts`, {
+        headers: { Authorization: `Zoho-oauthtoken ${token}` },
+        timeout: 20000,
+        validateStatus: () => true,
+    });
+
+    const account = data && Array.isArray(data.data) ? data.data[0] : null;
+    if (status !== 200 || !account) {
+        throw new Error(`Zoho accounts lookup failed (HTTP ${status}).`);
+    }
+
+    return {
+        accountId: account.accountId,
+        primaryEmail: account.primaryEmailAddress,
+        fromAddresses: (account.sendMailDetails || []).map((entry) => entry.fromAddress).filter(Boolean),
+    };
+}
+
+async function getAccountId() {
+    if (config.ZOHO_ACCOUNT_ID) return config.ZOHO_ACCOUNT_ID;
+    if (cachedAccountId) return cachedAccountId;
+
+    cachedAccountId = (await fetchAccount()).accountId;
+    return cachedAccountId;
+}
+
+/**
+ * Send one message through the Zoho Mail API.
+ *
+ * Not SMTP: Zoho's SMTP servers reject the XOAUTH2 handshake outright with
+ * "501 Could not do Unknown Authentication", because OAuth on Zoho Mail is
+ * scoped for the REST API rather than SMTP. SMTP remains available in this
+ * codebase, but only with an app-specific password — see mailer.service.js.
+ */
+async function sendMessage({ from, to, subject, text, html }) {
+    const token = await getAccessToken();
+    const accountId = await getAccountId();
+
+    const { status, data } = await axios.post(
+        `${mailApiBase()}/api/accounts/${accountId}/messages`,
+        {
+            fromAddress: from,
+            toAddress: to,
+            subject,
+            content: html || text,
+            mailFormat: html ? 'html' : 'plaintext',
+        },
+        {
+            headers: {
+                Authorization: `Zoho-oauthtoken ${token}`,
+                'Content-Type': 'application/json',
+            },
+            timeout: 25000,
+            validateStatus: () => true,
+        }
+    );
+
+    // As with the token endpoint, Zoho reports failures inside the body as
+    // readily as through the status line, so both are checked.
+    const description = data && data.status ? data.status.description : null;
+    if (status !== 200 || (description && description !== 'success')) {
+        throw new Error(
+            `Zoho refused the message (HTTP ${status}${description ? `, ${description}` : ''}). ` +
+                `Check that "${from}" is one of the account's permitted from-addresses.`
+        );
+    }
+
+    return { messageId: data && data.data ? data.data.messageId : undefined };
+}
+
 /** Connection state for the admin console. Never exposes the token itself. */
 async function getStatus() {
     const record = await prisma.oAuthCredential
@@ -215,16 +301,44 @@ async function getStatus() {
         })
         .catch(() => null);
 
+    const connected = Boolean(config.ZOHO_REFRESH_TOKEN || record);
+
+    // Best-effort: a live lookup of what the account may actually send as. This
+    // is the check that catches a ZOHO_MAIL_USER pointing at a mailbox the Zoho
+    // account does not own — invisible until a send fails otherwise. A failure
+    // here must not turn the status endpoint into a 500.
+    let account = null;
+    let accountError = null;
+    if (connected) {
+        try {
+            account = await fetchAccount();
+        } catch (error) {
+            accountError = error.message;
+        }
+    }
+
+    const canSendAs =
+        account && config.ZOHO_MAIL_USER
+            ? account.fromAddresses.some((a) => a.toLowerCase() === config.ZOHO_MAIL_USER.toLowerCase())
+            : null;
+
     return {
         configured: isConfigured(),
         enabledForMail: isEnabled(),
-        connected: Boolean(config.ZOHO_REFRESH_TOKEN || record),
+        connected,
         source: config.ZOHO_REFRESH_TOKEN ? 'env' : record ? 'database' : null,
         mailUser: config.ZOHO_MAIL_USER || null,
-        accountEmail: record ? record.accountEmail : null,
+        // The stored column is only a snapshot from connect time; the configured
+        // sender is the value actually used to send.
+        accountEmail: (record && record.accountEmail) || config.ZOHO_MAIL_USER || null,
         scope: record ? record.scope : config.ZOHO_SCOPE,
         connectedAt: record ? record.connectedAt : null,
         connectedByEmail: record ? record.connectedByEmail : null,
+        primaryEmail: account ? account.primaryEmail : null,
+        allowedFromAddresses: account ? account.fromAddresses : null,
+        /** null when unknown; false means every send will be rejected. */
+        canSendAsMailUser: canSendAs,
+        accountError,
     };
 }
 
@@ -254,6 +368,7 @@ async function disconnect() {
     }
 
     cachedAccess = null;
+    cachedAccountId = null;
 
     await prisma.oAuthCredential.deleteMany({ where: { provider: PROVIDER } });
 }
@@ -266,6 +381,9 @@ module.exports = {
     exchangeCodeForTokens,
     persistRefreshToken,
     getAccessToken,
+    fetchAccount,
+    getAccountId,
+    sendMessage,
     getStatus,
     disconnect,
 };

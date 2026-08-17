@@ -40,8 +40,16 @@ module.exports = {
     process.env.ZOHO_REDIRECT_URI ||
     `http://localhost:${process.env.PORT || 5000}/api/v1/zoho/oauth/callback`,
   ZOHO_SCOPE: process.env.ZOHO_SCOPE || 'ZohoMail.messages.CREATE,ZohoMail.accounts.READ',
-  /** The mailbox that sends platform mail, e.g. no-reply@fibicommunity.org. */
+  /** Mail API host, paired with the accounts realm above (mail.zoho.eu, .in, …). */
+  ZOHO_MAIL_API_DOMAIN: process.env.ZOHO_MAIL_API_DOMAIN || 'https://mail.zoho.com',
+  /**
+   * The mailbox that sends platform mail. Must be an address the Zoho account is
+   * actually allowed to send from — check with GET /api/v1/zoho/status, which
+   * lists them. A mailbox that merely exists in DNS is not enough.
+   */
   ZOHO_MAIL_USER: process.env.ZOHO_MAIL_USER,
+  /** Optional: skip the accounts lookup by pinning the Zoho account id. */
+  ZOHO_ACCOUNT_ID: process.env.ZOHO_ACCOUNT_ID,
   /** Optional: inject a refresh token directly and skip the browser connect flow entirely. */
   ZOHO_REFRESH_TOKEN: process.env.ZOHO_REFRESH_TOKEN,
 };

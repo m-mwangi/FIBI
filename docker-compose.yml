@@ -72,8 +72,10 @@ services:
       ZOHO_REDIRECT_URI: ${ZOHO_REDIRECT_URI:-}
       ZOHO_MAIL_USER: ${ZOHO_MAIL_USER:-}
       ZOHO_ACCOUNTS_DOMAIN: ${ZOHO_ACCOUNTS_DOMAIN:-https://accounts.zoho.com}
+      ZOHO_MAIL_API_DOMAIN: ${ZOHO_MAIL_API_DOMAIN:-https://mail.zoho.com}
       ZOHO_SCOPE: ${ZOHO_SCOPE:-ZohoMail.messages.CREATE,ZohoMail.accounts.READ}
       ZOHO_REFRESH_TOKEN: ${ZOHO_REFRESH_TOKEN:-}
+      ZOHO_ACCOUNT_ID: ${ZOHO_ACCOUNT_ID:-}
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
     volumes:
       - backend_uploads:/app/uploads
