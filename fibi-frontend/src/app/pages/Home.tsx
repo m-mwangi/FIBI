@@ -4,6 +4,18 @@ import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { useState, useEffect } from 'react';
+import { Seo } from '../seo/Seo';
+import { baseGraph, breadcrumbSchema, webPageSchema } from '../seo/schema';
+
+/**
+ * The homepage title is the site's single most contested string. It leads with
+ * the brand because "FIBI" is easily confused in search with several unrelated
+ * organisations, then states the category in the words a buyer would actually
+ * type.
+ */
+const SEO_TITLE = 'FIBI — Fractional Land Investment in Kenya';
+const SEO_DESCRIPTION =
+  'Invest from a fraction of the cost in vetted Kenyan land projects — eco-lodges, solar and agriculture. Transparent terms, published returns, collective ownership.';
 
 const HERO_IMAGES = [
   '/images/capsule12.jpeg',
@@ -66,6 +78,22 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white">
+      <Seo
+        title={SEO_TITLE}
+        bareTitle
+        description={SEO_DESCRIPTION}
+        path="/"
+        jsonLd={[
+          baseGraph(
+            webPageSchema({
+              name: SEO_TITLE,
+              description: SEO_DESCRIPTION,
+              path: '/',
+            }),
+            breadcrumbSchema([{ name: 'Home', path: '/' }]),
+          ),
+        ]}
+      />
       <section className="relative min-h-[100svh] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0">
           {HERO_IMAGES.map((src, i) => (

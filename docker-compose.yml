@@ -58,6 +58,22 @@ services:
       APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # Outbound mail. Without these the container cannot send password resets:
+      # NODE_ENV is production here, so the console fallback is refused outright.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-FIBI <no-reply@fibicommunity.org>}
+      # Zoho OAuth, used instead of SMTP_PASSWORD when both of ZOHO_CLIENT_ID
+      # and ZOHO_MAIL_USER are set. See .env.docker.example.
+      ZOHO_CLIENT_ID: ${ZOHO_CLIENT_ID:-}
+      ZOHO_CLIENT_SECRET: ${ZOHO_CLIENT_SECRET:-}
+      ZOHO_REDIRECT_URI: ${ZOHO_REDIRECT_URI:-}
+      ZOHO_MAIL_USER: ${ZOHO_MAIL_USER:-}
+      ZOHO_ACCOUNTS_DOMAIN: ${ZOHO_ACCOUNTS_DOMAIN:-https://accounts.zoho.com}
+      ZOHO_SCOPE: ${ZOHO_SCOPE:-ZohoMail.messages.CREATE,ZohoMail.accounts.READ}
+      ZOHO_REFRESH_TOKEN: ${ZOHO_REFRESH_TOKEN:-}
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
     volumes:
       - backend_uploads:/app/uploads

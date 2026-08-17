@@ -28,6 +28,9 @@ import { Separator } from '../components/ui/separator';
 import { getJson, postJson } from '@/lib/api';
 import { normalizeApiProject, type ProjectOneResponse } from '@/lib/projects';
 import { useAuth } from '../context/AuthContext';
+import { Seo } from '../seo/Seo';
+import { baseGraph, breadcrumbSchema, webPageSchema } from '../seo/schema';
+import { consumePrerenderPayload } from '../seo/prerenderData';
 
 type PaymentMethodOption = {
   provider: string;
@@ -54,8 +57,23 @@ export default function ProjectDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
-  const [project, setProject] = useState<Project | null>(null);
-  const [loadState, setLoadState] = useState<'loading' | 'error' | 'ready'>('loading');
+  /**
+   * Project supplied by the prerenderer for this exact URL, if any.
+   *
+   * Read once, in a state initialiser, so the server render and the first
+   * client render produce identical markup — hydration compares the two and
+   * throws the tree away on a mismatch. The id check guards the case where the
+   * payload belongs to a different project than the one being viewed.
+   */
+  const [seededProject] = useState<Project | null>(() => {
+    const seeded = consumePrerenderPayload().project ?? null;
+    return seeded && String(seeded.id) === String(id) ? seeded : null;
+  });
+
+  const [project, setProject] = useState<Project | null>(seededProject);
+  const [loadState, setLoadState] = useState<'loading' | 'error' | 'ready'>(
+    seededProject ? 'ready' : 'loading',
+  );
   const [loadError, setLoadError] = useState('');
   const [investmentAmount, setInvestmentAmount] = useState('');
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
@@ -77,7 +95,12 @@ export default function ProjectDetail() {
       return;
     }
     let cancelled = false;
-    setLoadState('loading');
+    // A prerendered page already shows this project. Refetch in the background
+    // for fresh funding figures rather than replacing it with a spinner — but
+    // only for the project that was actually seeded, so navigating on to a
+    // different one still shows a loading state instead of stale content.
+    const alreadyShowing = seededProject && String(seededProject.id) === String(id);
+    if (!alreadyShowing) setLoadState('loading');
     setLoadError('');
     setCurrentImage(0);
     (async () => {
@@ -95,7 +118,7 @@ export default function ProjectDetail() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, seededProject]);
 
   const images = project?.images?.length
     ? project.images
@@ -135,6 +158,8 @@ export default function ProjectDetail() {
   if (!project || loadState === 'error') {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center px-4 bg-gradient-to-b from-slate-50 to-emerald-50/30">
+        {/* A project that no longer resolves must not stay indexable. */}
+        <Seo title="Project not found" path={`/projects/${id ?? ''}`} noindex />
         <div className="rounded-3xl bg-white p-10 text-center shadow-xl ring-1 ring-slate-100 max-w-md">
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Project not found</h2>
           <p className="text-slate-600 mb-6 text-sm">
@@ -282,8 +307,48 @@ export default function ProjectDetail() {
     });
   };
 
+  const projectPath = `/projects/${project.id}`;
+  const categoryName = categoryLabel(project.category);
+
+  /**
+   * Description leads with the facts a searcher is comparing on — what, where,
+   * and what it targets — rather than the marketing copy, which is the same on
+   * every listing and gives a snippet nothing to distinguish.
+   */
+  const seoDescription =
+    `${categoryName} project in ${project.location}, Kenya. ` +
+    `Targeting ${project.projectedROI}% projected ROI with ${project.payoutFrequency} payouts. ` +
+    `${project.description || ''}`.trim().slice(0, 300);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-emerald-50/25">
+      {/*
+        No Product or Offer schema here — see the note in seo/schema.ts. A land
+        offering is not retail stock, and marking it up as such invites both
+        the wrong rich result and the wrong kind of regulatory attention.
+        BreadcrumbList mirrors the visible trail immediately below.
+      */}
+      <Seo
+        title={`${project.title} — ${categoryName} in ${project.location}`}
+        description={seoDescription}
+        path={projectPath}
+        image={project.imageUrl || undefined}
+        jsonLd={[
+          baseGraph(
+            webPageSchema({
+              name: project.title,
+              description: seoDescription,
+              path: projectPath,
+              image: project.imageUrl || undefined,
+            }),
+            breadcrumbSchema([
+              { name: 'Home', path: '/' },
+              { name: 'Projects', path: '/projects' },
+              { name: project.title, path: projectPath },
+            ]),
+          ),
+        ]}
+      />
       <div className="border-b border-slate-100 bg-white/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
           <Link to="/" className="hover:text-emerald-700 flex items-center gap-1">
