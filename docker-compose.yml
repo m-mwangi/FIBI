@@ -82,7 +82,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    networks: [internal]
+    networks:
+      internal:
+        # The proxy resolves this name, not the bare service name.
+        #
+        # `internal` is shared with the other tenant on this host, and Docker's
+        # embedded DNS answers a service name with EVERY container that carries
+        # it. Both stacks happen to call their API service `backend`, so
+        # `backend` resolved to two addresses, nginx loaded both into one
+        # upstream pool, and every second FIBI API request was answered by the
+        # neighbouring application. An alias nobody else uses cannot collide.
+        aliases: [fibi-backend]
     logging: *default_logging
 
   frontend:
@@ -106,7 +116,12 @@ services:
     security_opt: *no_new_privs
     depends_on:
       - backend
-    networks: [internal]
+    networks:
+      internal:
+        # Same reasoning as the backend alias above: unique by construction,
+        # so a neighbour calling its own service `frontend` cannot silently
+        # start serving half of this site's pages.
+        aliases: [fibi-frontend]
     logging: *default_logging
 
   proxy:
@@ -125,6 +140,9 @@ services:
     volumes:
       - ./deploy/nginx.conf:/etc/nginx/templates/nginx.conf.template:ro
       - ./deploy/ssl-params.conf:/etc/nginx/conf.d/ssl-params.conf:ro
+      # Other tenants on this host. Read-only, and deliberately outside this
+      # repository so the FIBI stack never owns another project's config.
+      - /srv/draftbit/deploy/vhosts:/etc/nginx/conf.d/vhosts:ro
       - ./deploy/cloudflare-realip.conf:/etc/nginx/cloudflare-realip.conf:ro
       - ./deploy/proxy-entrypoint.sh:/docker-entrypoint.d/99-fibi.sh:ro
       - letsencrypt_certs:/etc/letsencrypt:ro
