@@ -64,6 +64,9 @@ import {
 
 const STATUSES = ['open', 'funded', 'active', 'closed'] as const;
 
+/** Radix Select has no empty-string value, so "no master plan" needs a token. */
+const NO_MASTER_PLAN = '__none__';
+
 function defaultFundingDeadline(): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() + 1);
@@ -86,6 +89,8 @@ type FormState = {
   description: string;
   featuresText: string;
   status: string;
+  /** Master plan this project is a component of. '' = stands alone. */
+  parentId: string;
 };
 
 const emptyForm = (): FormState => ({
@@ -103,6 +108,7 @@ const emptyForm = (): FormState => ({
   description: '',
   featuresText: '',
   status: 'open',
+  parentId: '',
 });
 
 const formFromProject = (p: Project): FormState => ({
@@ -122,6 +128,7 @@ const formFromProject = (p: Project): FormState => ({
   description: p.description,
   featuresText: p.features.join('\n'),
   status: p.status,
+  parentId: p.parentId ?? '',
 });
 
 const inputClass = 'h-11 rounded-xl border-slate-200';
@@ -293,6 +300,21 @@ export default function Projects() {
     [projects.data, statusFilter]
   );
 
+  /**
+   * Projects this one can be made a component of.
+   *
+   * Excludes itself, and excludes anything that is already a component of
+   * something else: the investor-facing pages show one level of nesting — a
+   * master plan and its components — so a chain deeper than that would exist
+   * in the database with nowhere to appear.
+   */
+  const masterPlanOptions = useMemo(() => {
+    const selfId = editing && editing.mode === 'edit' ? editing.project.id : null;
+    return projects.data
+      .filter((p) => p.id !== selfId && !p.parentId)
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [projects.data, editing]);
+
   const counts = useMemo(() => {
     const base: Record<string, number> = { all: projects.data.length };
     for (const s of STATUSES) base[s] = projects.data.filter((p) => p.status === s).length;
@@ -372,6 +394,7 @@ export default function Projects() {
     fd.append('description', form.description.trim() || '—');
     fd.append('features', JSON.stringify(features));
     fd.append('status', form.status);
+    fd.append('parentId', form.parentId);
   };
 
   const handleSubmit = async () => {
@@ -442,6 +465,7 @@ export default function Projects() {
         description: form.description.trim() || '—',
         features,
         status: form.status,
+        parentId: form.parentId,
       });
     }
 
@@ -827,6 +851,34 @@ export default function Projects() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pf-parent">Part of</Label>
+                  {/*
+                    Radix rejects an empty string as an item value, so the
+                    "stands alone" case travels as the sentinel the API already
+                    reads as null — see resolveParentId in the controller.
+                  */}
+                  <Select
+                    value={form.parentId || NO_MASTER_PLAN}
+                    onValueChange={(v) => set2('parentId', v === NO_MASTER_PLAN ? '' : v)}
+                  >
+                    <SelectTrigger id="pf-parent" className="h-11 rounded-xl">
+                      <SelectValue placeholder="Standalone project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_MASTER_PLAN}>Standalone project</SelectItem>
+                      {masterPlanOptions.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500">
+                    Links this project as a component of a larger development — it then appears on
+                    that master plan's page, and shows the master plan on its own.
+                  </p>
                 </div>
               </div>
             </FormSection>

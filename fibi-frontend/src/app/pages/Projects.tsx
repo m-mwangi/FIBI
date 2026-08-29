@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router';
-import { MapPin, TrendingUp, Calendar, ChevronLeft, ChevronRight, Users, Loader2 } from 'lucide-react';
+import { MapPin, TrendingUp, Calendar, ChevronLeft, ChevronRight, Users, Layers, Loader2 } from 'lucide-react';
 import type { Project } from '../data/projects';
 import { getJson } from '@/lib/api';
 import { categoryLabel, normalizeApiProject, type ProjectListResponse } from '@/lib/projects';
@@ -74,6 +74,8 @@ export default function Projects() {
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(
       minorUnits / 100
     );
+
+  const componentCount = (project: Project) => project.components?.length ?? 0;
 
   const statusClass: Record<string, string> = {
     open: 'bg-emerald-500 hover:bg-emerald-600 border-0 text-white',
@@ -230,6 +232,32 @@ export default function Projects() {
                     <MapPin className="mr-1 h-4 w-4 shrink-0 text-emerald-600" />
                     {project.location}
                   </div>
+                  {/*
+                    A project can be one component of a larger development — the
+                    Chukka Dome inside Cianda Polo & Forest City. Say which way
+                    the link runs on the card itself, so the listing reads as a
+                    set of developments rather than a flat pile of line items.
+                  */}
+                  {componentCount(project) > 0 && (
+                    <p className="flex items-center gap-1.5 pt-0.5 text-sm font-medium text-emerald-700">
+                      <Layers className="h-4 w-4 shrink-0" />
+                      Master plan · {componentCount(project)} linked projects
+                    </p>
+                  )}
+                  {project.parent && (
+                    <p className="flex items-center gap-1.5 pt-0.5 text-sm text-slate-500">
+                      <Layers className="h-4 w-4 shrink-0 text-slate-400" />
+                      <span className="truncate">
+                        Part of{' '}
+                        <Link
+                          to={`/projects/${project.parent.id}`}
+                          className="font-medium text-emerald-700 hover:text-emerald-800 hover:underline"
+                        >
+                          {project.parent.title}
+                        </Link>
+                      </span>
+                    </p>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-4 px-5 pb-5 pt-4">
                   <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5">

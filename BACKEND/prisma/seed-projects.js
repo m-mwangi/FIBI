@@ -1,5 +1,6 @@
 require("dotenv/config");
 const { prisma } = require("../config/db");
+const { ciandaMasterPlan } = require("./data/cianda-master-plan");
 
 const projectSeeds = [
   {
@@ -387,6 +388,23 @@ const projectSeeds = [
   },
 ];
 
+/** Creates one project row plus its timeline phases and gallery images. */
+const createProject = (project, parentId = null) => {
+  const { timeline, images = [], components: _components, ...projectData } = project;
+  return prisma.project.create({
+    data: {
+      ...projectData,
+      parentId,
+      timeline: {
+        create: timeline,
+      },
+      projectImages: {
+        create: images.map((imageUrl) => ({ imageUrl })),
+      },
+    },
+  });
+};
+
 async function seedProjectsOnly() {
   console.log("Seeding projects only...");
 
@@ -394,21 +412,21 @@ async function seedProjectsOnly() {
   await prisma.project.deleteMany();
 
   for (const project of projectSeeds) {
-    const { timeline, images = [], ...projectData } = project;
-    await prisma.project.create({
-      data: {
-        ...projectData,
-        timeline: {
-          create: timeline,
-        },
-        projectImages: {
-          create: images.map((imageUrl) => ({ imageUrl })),
-        },
-      },
-    });
+    await createProject(project);
   }
 
-  console.log(`Seed complete. Inserted ${projectSeeds.length} projects.`);
+  // The master plan has to exist before its components can point at it, so it
+  // is seeded as a tree rather than another entry in the flat list above.
+  const master = await createProject(ciandaMasterPlan);
+  for (const component of ciandaMasterPlan.components) {
+    await createProject(component, master.id);
+  }
+
+  const ciandaCount = 1 + ciandaMasterPlan.components.length;
+  console.log(
+    `Seed complete. Inserted ${projectSeeds.length + ciandaCount} projects ` +
+      `(${ciandaCount} of them the ${ciandaMasterPlan.title} master plan and its components).`
+  );
 }
 
 seedProjectsOnly()

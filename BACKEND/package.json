@@ -14,7 +14,8 @@
     "create-admin": "node scripts/create-admin.js",
     "dev-investor": "node scripts/create-dev-investor.js",
     "test-email": "node scripts/test-email.js",
-    "seed:projects": "node prisma/seed-projects.js"
+    "seed:projects": "node prisma/seed-projects.js",
+    "seed:cianda": "node prisma/seed-cianda.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.6.0",

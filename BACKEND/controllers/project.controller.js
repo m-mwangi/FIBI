@@ -49,10 +49,85 @@ const parseNumberField = (value) => {
 
 const dedupeStrings = (values) => [...new Set(values.filter(Boolean))];
 
+/**
+ * Enough of a linked project to render a card without a second request, and
+ * no more — a master plan carries seven components, and shipping each one's
+ * full description and gallery would triple the size of the list response.
+ */
+const LINKED_PROJECT_SUMMARY = {
+    id: true,
+    title: true,
+    category: true,
+    location: true,
+    status: true,
+    imageUrl: true,
+    currency: true,
+    minInvestmentMinor: true,
+    totalFundingMinor: true,
+    currentFundingMinor: true,
+    projectedROI: true,
+};
+
+/**
+ * Components come back largest-capital first: that is the order a master plan
+ * reads in — the revenue engine before the amenities — and it is stable, which
+ * createdAt on a bulk seed is not.
+ */
+const projectInclude = {
+    timeline: true,
+    projectImages: true,
+    parent: { select: LINKED_PROJECT_SUMMARY },
+    components: {
+        select: LINKED_PROJECT_SUMMARY,
+        orderBy: { totalFundingMinor: 'desc' },
+    },
+};
+
+/**
+ * Resolve the master plan a project should hang off.
+ *
+ * Returns `undefined` when the caller did not mention parentId at all, so an
+ * update that leaves the field out does not silently unlink a component.
+ * Throws for the two links that cannot be honoured: a project as its own
+ * parent, and a parent that does not exist.
+ */
+const resolveParentId = async (rawValue, selfId = null) => {
+    if (rawValue === undefined) return undefined;
+    if (rawValue === null || rawValue === '' || rawValue === 'none') return null;
+
+    const parentId = String(rawValue).trim();
+    if (!parentId) return null;
+    if (selfId && parentId === selfId) {
+        throw new Error('SELF_PARENT');
+    }
+
+    const parent = await prisma.project.findUnique({
+        where: { id: parentId },
+        select: { id: true },
+    });
+    if (!parent) {
+        throw new Error('PARENT_NOT_FOUND');
+    }
+    return parent.id;
+};
+
+/** Maps the two link failures onto responses; rethrows anything else. */
+const respondToParentError = (res, error) => {
+    if (error.message === 'SELF_PARENT') {
+        res.status(400).json({ error: 'A project cannot be a component of itself.' });
+        return true;
+    }
+    if (error.message === 'PARENT_NOT_FOUND') {
+        res.status(400).json({ error: 'The selected master plan does not exist.' });
+        return true;
+    }
+    return false;
+};
+
 const getProjects = async (req, res) => {
     try {
         const projects = await prisma.project.findMany({
-            include: { timeline: true, projectImages: true }
+            include: projectInclude
         });
         res.status(200).json({ projects });
     } catch (error) {
@@ -66,7 +141,7 @@ const getProjectById = async (req, res) => {
         const { id } = req.params;
         const project = await prisma.project.findUnique({
             where: { id },
-            include: { timeline: true, projectImages: true }
+            include: projectInclude
         });
 
         if (!project) {
@@ -99,7 +174,8 @@ const createProject = async (req, res) => {
             imageUrl,
             images,
             status,
-            timeline
+            timeline,
+            parentId
         } = req.body;
 
         const primaryUpload = req.files?.image?.[0];
@@ -129,6 +205,14 @@ const createProject = async (req, res) => {
             status: t.status === 'in-progress' ? 'in_progress' : t.status
         }));
 
+        let resolvedParentId;
+        try {
+            resolvedParentId = await resolveParentId(parentId);
+        } catch (parentError) {
+            if (respondToParentError(res, parentError)) return;
+            throw parentError;
+        }
+
         const project = await prisma.project.create({
             data: {
                 title,
@@ -146,6 +230,7 @@ const createProject = async (req, res) => {
                 features: parsedFeatures,
                 imageUrl: finalPrimaryImage,
                 status: status || 'open',
+                parentId: resolvedParentId ?? null,
                 timeline: {
                     create: mappedTimeline
                 },
@@ -153,7 +238,7 @@ const createProject = async (req, res) => {
                     create: allImages.map((url) => ({ imageUrl: url })),
                 },
             },
-            include: { timeline: true, projectImages: true }
+            include: projectInclude
         });
 
         recordAudit(req, {
@@ -166,6 +251,7 @@ const createProject = async (req, res) => {
                 totalFundingMinor: String(project.totalFundingMinor),
                 currency: project.currency,
                 status: project.status,
+                parentId: project.parentId || undefined,
             },
         });
 
@@ -220,6 +306,18 @@ const updateProject = async (req, res) => {
             updates.currency = normaliseCurrency(updates.currency);
         }
 
+        // A blank select means "not part of a master plan", which has to reach
+        // Prisma as null rather than an empty string it would treat as a
+        // foreign key and reject.
+        if (updates.parentId !== undefined) {
+            try {
+                updates.parentId = await resolveParentId(updates.parentId, id);
+            } catch (parentError) {
+                if (respondToParentError(res, parentError)) return;
+                throw parentError;
+            }
+        }
+
         if (primaryUpload || additionalUploads.length > 0) {
             const existingProject = await prisma.project.findUnique({
                 where: { id },
@@ -259,14 +357,14 @@ const updateProject = async (req, res) => {
             select: {
                 title: true, location: true, category: true, minInvestmentMinor: true,
                 totalFundingMinor: true, currentFundingMinor: true, currency: true, investorsCount: true,
-                projectedROI: true, payoutFrequency: true, status: true,
+                projectedROI: true, payoutFrequency: true, status: true, parentId: true,
             }
         });
 
         const project = await prisma.project.update({
             where: { id },
             data: updates,
-            include: { timeline: true, projectImages: true }
+            include: projectInclude
         });
 
         const imageRows = dedupeStrings(allExtraImages);
@@ -281,7 +379,7 @@ const updateProject = async (req, res) => {
 
         const updatedProject = await prisma.project.findUnique({
             where: { id },
-            include: { timeline: true, projectImages: true }
+            include: projectInclude
         });
 
         const changes = before
@@ -291,7 +389,7 @@ const updateProject = async (req, res) => {
                   currentFundingMinor: project.currentFundingMinor, currency: project.currency,
                   investorsCount: project.investorsCount,
                   projectedROI: project.projectedROI, payoutFrequency: project.payoutFrequency,
-                  status: project.status,
+                  status: project.status, parentId: project.parentId,
               })
             : null;
 

@@ -15,6 +15,7 @@ import {
   Home,
   Calendar,
   Users,
+  Layers,
   Loader2,
 } from 'lucide-react';
 import type { Project } from '../data/projects';
@@ -178,6 +179,11 @@ export default function ProjectDetail() {
       ? Math.min(100, (project.currentFundingMinor / project.totalFundingMinor) * 100)
       : 0;
   const remaining = project.totalFundingMinor - project.currentFundingMinor;
+  const components = project.components ?? [];
+  // The capital the components add up to. On a master plan seeded from a deck
+  // this equals its own target; showing it lets a reader check that rather
+  // than take it on trust.
+  const componentsTotalMinor = components.reduce((sum, c) => sum + c.totalFundingMinor, 0);
 
   // Takes integer MINOR units (cents), matching the API.
   const formatCurrency = (minorUnits: number) =>
@@ -338,6 +344,11 @@ export default function ProjectDetail() {
             breadcrumbSchema([
               { name: 'Home', path: '/' },
               { name: 'Projects', path: '/projects' },
+              // Mirrors the visible trail, which gains a level when this
+              // project is a component of a larger development.
+              ...(project.parent
+                ? [{ name: project.parent.title, path: `/projects/${project.parent.id}` }]
+                : []),
               { name: project.title, path: projectPath },
             ]),
           ),
@@ -353,6 +364,17 @@ export default function ProjectDetail() {
           <Link to="/projects" className="hover:text-emerald-700">
             Projects
           </Link>
+          {project.parent && (
+            <>
+              <ChevronRight className="h-4 w-4 text-slate-300" />
+              <Link
+                to={`/projects/${project.parent.id}`}
+                className="hover:text-emerald-700 truncate max-w-[160px] sm:max-w-xs"
+              >
+                {project.parent.title}
+              </Link>
+            </>
+          )}
           <ChevronRight className="h-4 w-4 text-slate-300" />
           <span className="text-slate-900 font-medium truncate max-w-[200px] sm:max-w-md">{project.title}</span>
         </div>
@@ -444,6 +466,95 @@ export default function ProjectDetail() {
                 <p className="leading-relaxed text-slate-700">{project.description}</p>
               </CardContent>
             </Card>
+
+            {/*
+              The two directions of the master-plan link. A component says what
+              it belongs to; a master plan lists what it is made of. Both are
+              placed directly under the description, because "is this the whole
+              development or one piece of it?" is the first question an
+              investor has once they have read what the project is.
+            */}
+            {project.parent && (
+              <Card className="border-0 rounded-2xl shadow-lg shadow-slate-200/40 ring-1 ring-emerald-100 bg-emerald-50/40">
+                <CardContent className="flex flex-wrap items-center gap-4 p-5">
+                  <img
+                    src={project.parent.imageUrl}
+                    alt=""
+                    className="h-16 w-24 shrink-0 rounded-xl object-cover bg-slate-100"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-700">
+                      <Layers className="h-3.5 w-3.5" />
+                      Part of a master plan
+                    </p>
+                    <p className="mt-1 truncate font-semibold text-slate-900">{project.parent.title}</p>
+                    <p className="text-sm text-slate-600">
+                      {categoryLabel(project.parent.category)} · {project.parent.location}
+                    </p>
+                  </div>
+                  <Link to={`/projects/${project.parent.id}`} className="shrink-0">
+                    <Button variant="outline" className="rounded-xl border-emerald-200 text-emerald-800">
+                      View master plan
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
+
+            {components.length > 0 && (
+              <Card className="border-0 rounded-2xl shadow-lg shadow-slate-200/40 ring-1 ring-slate-100">
+                <CardHeader className="space-y-1">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                    <Layers className="h-5 w-5 text-emerald-600" />
+                    Linked projects
+                  </CardTitle>
+                  <p className="text-sm text-slate-600">
+                    {components.length} projects that make up this development. Each one can be
+                    reviewed and backed on its own.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <ul className="divide-y divide-slate-100">
+                    {components.map((component) => (
+                      <li key={component.id}>
+                        <Link
+                          to={`/projects/${component.id}`}
+                          className="group flex items-center gap-4 py-3"
+                        >
+                          <img
+                            src={component.imageUrl}
+                            alt=""
+                            className="h-14 w-20 shrink-0 rounded-xl object-cover bg-slate-100"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium text-slate-900 group-hover:text-emerald-700">
+                              {component.title}
+                            </p>
+                            <p className="text-sm text-slate-500">
+                              {categoryLabel(component.category)} · min{' '}
+                              {formatCurrency(component.minInvestmentMinor)}
+                            </p>
+                          </div>
+                          <div className="hidden shrink-0 text-right sm:block">
+                            <p className="font-semibold tabular-nums text-slate-900">
+                              {formatCurrency(component.totalFundingMinor)}
+                            </p>
+                            <p className="text-xs text-slate-500">capital</p>
+                          </div>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 group-hover:text-emerald-600" />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3 text-sm">
+                    <span className="text-slate-600">Linked projects total</span>
+                    <span className="font-semibold tabular-nums text-slate-900">
+                      {formatCurrency(componentsTotalMinor)}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <Card className="border-0 rounded-2xl shadow-lg shadow-slate-200/40 ring-1 ring-slate-100">
               <CardHeader>

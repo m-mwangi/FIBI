@@ -473,11 +473,23 @@ model Project {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // A project may be one component of a larger development — The Chukka Dome
+  // sits inside The Cianda Polo & Forest City. The link is a plain self
+  // relation rather than a separate join table because a component belongs to
+  // exactly one master plan, and it is nullable because most listings stand
+  // alone. Deleting a master leaves its components as independent listings
+  // (SetNull) instead of taking live investments down with it.
+  parentId        String?
+
   //Relationships
   timeline Timeline[] //One to many relationship with Timeline phases
   investments Investment[] //One to many relationship with Investment
   projectImages ProjectImage[]
   payments Payment[] //One to many relationship with Payment
+  parent     Project?  @relation("ProjectComponents", fields: [parentId], references: [id], onDelete: SetNull)
+  components Project[] @relation("ProjectComponents")
+
+  @@index([parentId])
 }
 
 model ProjectImage {

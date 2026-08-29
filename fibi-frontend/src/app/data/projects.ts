@@ -1,5 +1,24 @@
 // src/data/projects.ts
 
+/**
+ * A project referenced from another project — a master plan seen from one of
+ * its components, or a component seen from its master plan. Carries only what
+ * a link card shows; follow the id for the rest.
+ */
+export interface ProjectLink {
+  id: string;
+  title: string;
+  category: string;
+  location: string;
+  status: string;
+  imageUrl: string;
+  currency: string;
+  minInvestmentMinor: number;
+  totalFundingMinor: number;
+  currentFundingMinor: number;
+  projectedROI: number;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -22,6 +41,11 @@ export interface Project {
   images?: string[]; // Added array for multiple images
   status: 'open' | 'funded' | 'active' | 'closed';
   timeline: { phase: string; status: 'completed' | 'in-progress' | 'upcoming' }[];
+  /** Set when this project is one component of a larger development. */
+  parentId?: string | null;
+  parent?: ProjectLink | null;
+  /** Set when this project is a master plan other projects hang off. */
+  components?: ProjectLink[];
 }
 
 export const projects: Project[] = [

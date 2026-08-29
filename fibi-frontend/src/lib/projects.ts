@@ -1,5 +1,5 @@
 import { getApiBase } from '@/lib/api';
-import type { Project } from '@/app/data/projects';
+import type { Project, ProjectLink } from '@/app/data/projects';
 
 export type ApiProjectImage = {
   id: string;
@@ -13,6 +13,21 @@ export type ApiTimelinePhase = {
   phase: string;
   status: string;
   projectId: string;
+};
+
+/** A linked project as the API summarises it — see LINKED_PROJECT_SUMMARY. */
+export type ApiProjectLink = {
+  id: string;
+  title: string;
+  category: string;
+  location: string;
+  status: string;
+  imageUrl: string;
+  currency: string;
+  minInvestmentMinor: number;
+  totalFundingMinor: number;
+  currentFundingMinor: number;
+  projectedROI: number;
 };
 
 /** Raw project from GET /api/v1/projects */
@@ -35,15 +50,30 @@ export type ApiProject = {
   status: string;
   timeline: ApiTimelinePhase[];
   projectImages?: ApiProjectImage[];
+  parentId?: string | null;
+  parent?: ApiProjectLink | null;
+  components?: ApiProjectLink[];
 };
 
+/**
+ * Absolute URL for a stored image path.
+ *
+ * Only `/uploads/...` lives on the API host — that is where multer writes and
+ * where Express serves from. Everything else (`/images/...`) is a static asset
+ * of this frontend, so it stays relative and resolves against whatever origin
+ * is serving the page. In production the two are the same origin behind nginx
+ * and the distinction is invisible; in local development it is the difference
+ * between an image and a broken one, because the dev server on :5173 holds the
+ * static files and the API on :5000 does not.
+ */
 export function resolveMediaUrl(pathOrUrl: string | null | undefined): string {
   if (!pathOrUrl) return '';
   const s = pathOrUrl.trim();
   if (!s) return '';
   if (s.startsWith('http://') || s.startsWith('https://')) return s;
-  const base = getApiBase().replace(/\/$/, '');
   const path = s.startsWith('/') ? s : `/${s}`;
+  if (!path.startsWith('/uploads/')) return path;
+  const base = getApiBase().replace(/\/$/, '');
   return `${base}${path}`;
 }
 
@@ -80,6 +110,13 @@ const CATEGORY_LABELS: Record<string, string> = {
   agriculture: 'Agriculture',
   'bulk-parcel': 'Bulk parcel',
   'coastal-beach': 'Coastal beach',
+  'master-plan': 'Master plan',
+  residential: 'Residential',
+  'estate-lots': 'Estate lots',
+  equestrian: 'Equestrian',
+  entertainment: 'Entertainment',
+  'sports-leisure': 'Sports & leisure',
+  'eco-infrastructure': 'Eco infrastructure',
 };
 
 export function categoryLabel(category: string): string {
@@ -89,6 +126,22 @@ export function categoryLabel(category: string): string {
   const cleaned = category.replace(/[-_]+/g, ' ').trim();
   if (!cleaned) return category;
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+function normalizeApiProjectLink(raw: ApiProjectLink): ProjectLink {
+  return {
+    id: raw.id,
+    title: raw.title,
+    category: raw.category,
+    location: raw.location,
+    status: raw.status,
+    imageUrl: resolveMediaUrl(raw.imageUrl),
+    currency: raw.currency || 'USD',
+    minInvestmentMinor: Number(raw.minInvestmentMinor ?? 0),
+    totalFundingMinor: Number(raw.totalFundingMinor ?? 0),
+    currentFundingMinor: Number(raw.currentFundingMinor ?? 0),
+    projectedROI: Number(raw.projectedROI ?? 0),
+  };
 }
 
 export function normalizeApiProject(raw: ApiProject): Project {
@@ -126,6 +179,9 @@ export function normalizeApiProject(raw: ApiProject): Project {
       phase: t.phase,
       status: mapTimelineStatus(t.status),
     })),
+    parentId: raw.parentId ?? null,
+    parent: raw.parent ? normalizeApiProjectLink(raw.parent) : null,
+    components: (raw.components ?? []).map(normalizeApiProjectLink),
   };
 }
 
