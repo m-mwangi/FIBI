@@ -30,8 +30,10 @@
  * recurring income is explicitly excluded from the 103.6%. Each of them says
  * so in its own description rather than showing an invented standalone yield.
  *
- * Images are placeholders drawn from the existing library. Replace them with
- * renders from the Artis master plan before this goes in front of investors.
+ * Images are placeholders. The Chukka Dome carries a real immersive-dome
+ * interior, since a landscape said nothing about what that venue is; the rest
+ * reuse the existing hero library. Replace all of them with renders from the
+ * Artis master plan before this goes in front of investors.
  */
 
 const KES_PER_USD = 129;
@@ -205,8 +207,11 @@ const ciandaMasterPlan = {
         "Event-hire revenue is upside, not counted in the master-plan ROI",
         "Budget is a planning-level scaling estimate, not yet a vendor quote",
       ],
-      imageUrl: "/images/hero11.jpeg",
-      images: ["/images/hero11.jpeg", "/images/hero7.png"],
+      // A real immersive-dome interior — screen wrapping the audience above
+      // tiered seating — rather than a landscape. See IMAGE-CREDITS.md: it is
+      // a planetarium, not a Cosm venue, and not a render of this design.
+      imageUrl: "/images/chukka-dome-1.jpg",
+      images: ["/images/chukka-dome-1.jpg", "/images/chukka-dome-2.jpg"],
       status: "open",
       timeline: [
         { phase: "Direct quote from Cosm's private licensing team", status: "upcoming" },
